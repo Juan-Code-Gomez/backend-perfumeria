@@ -1,0 +1,3 @@
+-- AlterTable
+ALTER TABLE "Product" ALTER COLUMN "categoryId" DROP DEFAULT,
+ALTER COLUMN "pricePerUnit" DROP DEFAULT;
