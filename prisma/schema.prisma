@@ -39,6 +39,7 @@ model Product {
   price           Float
   categoryId      Int
   purchaseDetails PurchaseDetail[]
+  salesDetail     SaleDetail[]
   category        Category         @relation(fields: [categoryId], references: [id]) // relación directa
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @updatedAt
@@ -78,6 +79,31 @@ model PurchaseDetail {
   quantity   Float
   unitCost   Float
   totalCost  Float
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+model Sale {
+  id           Int          @id @default(autoincrement())
+  date         DateTime     @default(now())
+  customerName String?
+  totalAmount  Float
+  paidAmount   Float
+  isPaid       Boolean      @default(false)
+  details      SaleDetail[]
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+}
+
+model SaleDetail {
+  id         Int      @id @default(autoincrement())
+  saleId     Int
+  sale       Sale     @relation(fields: [saleId], references: [id])
+  productId  Int
+  product    Product  @relation(fields: [productId], references: [id])
+  quantity   Float
+  unitPrice  Float
+  totalPrice Float
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 }
