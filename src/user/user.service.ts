@@ -6,19 +6,19 @@ const prisma = new PrismaClient();
 
 @Injectable()
 export class UserService {
-  async create(data: { name: string; email: string; password: string }) {
+  async create(data: { name: string; username: string; password: string }) {
     const hashedPassword = await bcrypt.hash(data.password, 10);
     return prisma.user.create({
       data: {
         name: data.name,
-        email: data.email,
+        username: data.username,
         password: hashedPassword,
         role: Role.USER,
       },
     });
   }
 
-  async findByEmail(email: string) {
-    return prisma.user.findUnique({ where: { email } });
+  async findByUsername(username: string) {
+    return prisma.user.findUnique({ where: { username: username } });
   }
 }

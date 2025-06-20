@@ -8,15 +8,15 @@ export class AuthService {
   constructor(private jwt: JwtService, private userService: UserService) {}
 
   async register(data: any) {
-    const userExists = await this.userService.findByEmail(data.email);
-    if (userExists) throw new UnauthorizedException('Email ya registrado');
+    const userExists = await this.userService.findByUsername(data.username);
+    if (userExists) throw new UnauthorizedException('Usuario ya registrado');
     const user = await this.userService.create(data);
     const token = this.jwt.sign({ id: user.id, role: user.role });
     return { user, token };
   }
 
   async login(data: any) {
-    const user = await this.userService.findByEmail(data.email);
+    const user = await this.userService.findByUsername(data.username);
     if (!user || !(await bcrypt.compare(data.password, user.password))) {
       throw new UnauthorizedException('Credenciales inválidas');
     }
