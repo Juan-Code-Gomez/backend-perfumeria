@@ -1,24 +1,61 @@
+// src/user/user.service.ts
 import { Injectable } from '@nestjs/common';
-import { PrismaClient, Role } from '@prisma/client';
+import { PrismaService } from '../prisma/prisma.service';
 import * as bcrypt from 'bcrypt';
-
-const prisma = new PrismaClient();
 
 @Injectable()
 export class UserService {
-  async create(data: { name: string; username: string; password: string }) {
+  constructor(private readonly prisma: PrismaService) {}
+
+  // Nuevo signature: roleIds opcional
+  async create(data: {
+    name: string;
+    username: string;
+    password: string;
+    roleIds?: number[];
+  }) {
     const hashedPassword = await bcrypt.hash(data.password, 10);
-    return prisma.user.create({
+
+    // Si no me pasaron roleIds, por defecto conectamos al rol "USER"
+    const roleConnections = (data.roleIds && data.roleIds.length > 0)
+      ? data.roleIds.map((id) => ({ role: { connect: { id } } }))
+      : [{ role: { connect: { name: 'USER' } } }];
+
+    return this.prisma.user.create({
       data: {
-        name: data.name,
         username: data.username,
+        name: data.name,
         password: hashedPassword,
-        role: Role.USER,
+        roles: {
+          create: roleConnections,
+        },
+      },
+      include: {
+        roles: {
+          include: { role: true },
+        },
       },
     });
   }
 
+  async findAll() {
+    return this.prisma.user.findMany({
+      include: { roles: { include: { role: true } } },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async findOne(id: number) {
+    return this.prisma.user.findUnique({
+      where: { id },
+      include: { roles: { include: { role: true } } },
+    });
+  }
+
   async findByUsername(username: string) {
-    return prisma.user.findUnique({ where: { username: username } });
+    return this.prisma.user.findUnique({
+      where: { username: username },
+      include: { roles: { include: { role: true } } },
+    });
   }
 }
