@@ -8,11 +8,13 @@ import {
   Put,
   UseGuards,
   ParseIntPipe,
+  Query,
 } from '@nestjs/common';
 import { ProductsService } from './products.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { QueryProductDto } from './dto/query-product.dto';
 
 @Controller('products')
 export class ProductsController {
@@ -20,8 +22,8 @@ export class ProductsController {
 
   @UseGuards(JwtAuthGuard)
   @Get()
-  findAll() {
-    return this.productsService.findAll();
+  findAll(@Query()  query: QueryProductDto) {
+    return this.productsService.findAll(query);
   }
 
   @UseGuards(JwtAuthGuard)

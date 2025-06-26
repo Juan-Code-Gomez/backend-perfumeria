@@ -29,9 +29,20 @@ export class ProductsService {
       }));
   }
 
-  findAll() {
+  async findAll(filters: {
+    name?: string;
+    categoryId?: number;
+    stockMin?: number;
+  }) {
+    const { name, categoryId, stockMin } = filters;
     return this.prisma.product.findMany({
+      where: {
+        name: name ? { contains: name, mode: 'insensitive' } : undefined,
+        categoryId: categoryId ?? undefined,
+        stock: stockMin != null ? { gte: stockMin } : undefined,
+      },
       include: { category: true },
+      orderBy: { name: 'asc' },
     });
   }
 
