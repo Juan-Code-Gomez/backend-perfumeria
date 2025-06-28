@@ -8,18 +8,18 @@ datasource db {
 }
 
 model User {
-  id         Int         @id @default(autoincrement())
-  username String      @unique
-  password   String
-  name       String
-  roles      UserRole[]
-  createdAt  DateTime    @default(now())
-  updatedAt  DateTime    @updatedAt
+  id        Int        @id @default(autoincrement())
+  username  String     @unique
+  password  String
+  name      String
+  roles     UserRole[]
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
 }
 
 model Role {
-  id          Int         @id @default(autoincrement())
-  name        String      @unique
+  id          Int        @id @default(autoincrement())
+  name        String     @unique
   description String?
   users       UserRole[]
 }
@@ -39,21 +39,31 @@ model Category {
   products Product[] // relación inversa
 }
 
+model Unit {
+  id       Int       @id @default(autoincrement())
+  name     String    @unique // Ejemplo: "Gramos", "Onzas", "Frascos"
+  symbol   String? // Ejemplo: "g", "oz", "ml"
+  products Product[]
+}
+
 model Product {
-  id              Int              @id @default(autoincrement())
+  id              Int               @id @default(autoincrement())
   name            String
-  description     String
-  unit            String
-  stock           Int
-  cost            Float
-  pricePerUnit    Float
-  price           Float
+  description     String?
   categoryId      Int
-  purchaseDetails PurchaseDetail[]
-  salesDetail     SaleDetail[]
-  category        Category         @relation(fields: [categoryId], references: [id]) // relación directa
-  createdAt       DateTime         @default(now())
-  updatedAt       DateTime         @updatedAt
+  category        Category          @relation(fields: [categoryId], references: [id])
+  unitId          Int
+  unit            Unit              @relation(fields: [unitId], references: [id])
+  stock           Float // Por si usas gramos, permite decimales
+  minStock        Float? // Stock mínimo para alertas
+  purchasePrice   Float // Precio de compra
+  salePrice       Float // Precio de venta
+  imageUrl        String? // Imagen del producto
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  ProductMovement ProductMovement[]
+  PurchaseDetail  PurchaseDetail[]
+  SaleDetail      SaleDetail[]
 }
 
 model Supplier {
@@ -117,4 +127,21 @@ model SaleDetail {
   totalPrice Float
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
+}
+
+model ProductMovement {
+  id        Int          @id @default(autoincrement())
+  productId Int
+  product   Product      @relation(fields: [productId], references: [id])
+  type      MovementType // "IN", "OUT", "ADJUST"
+  quantity  Float
+  price     Float? // Precio unitario de compra o venta (si aplica)
+  note      String? // Ejemplo: "Compra a Proveedor X", "Venta factura 123"
+  createdAt DateTime     @default(now())
+}
+
+enum MovementType {
+  IN // Entrada (compra)
+  OUT // Salida (venta)
+  ADJUST // Ajuste manual
 }

@@ -11,9 +11,22 @@ import { SupplierModule } from './supplier/supplier.module';
 import { PurchaseModule } from './purchase/purchase.module';
 import { SaleModule } from './sale/sale.module';
 import { RoleModule } from './role/role.module';
+import { UnitModule } from './unit/unit.module';
 
 @Module({
-  imports: [AuthModule, UserModule, ProtectedModule, ProductsModule, PrismaModule, CategoryModule, SupplierModule, PurchaseModule, SaleModule, RoleModule],
+  imports: [
+    AuthModule,
+    UserModule,
+    ProtectedModule,
+    ProductsModule,
+    PrismaModule,
+    CategoryModule,
+    SupplierModule,
+    PurchaseModule,
+    SaleModule,
+    RoleModule,
+    UnitModule,
+  ],
   controllers: [AppController],
   providers: [AppService],
 })

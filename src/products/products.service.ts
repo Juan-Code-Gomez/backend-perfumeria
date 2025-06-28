@@ -13,9 +13,9 @@ export class ProductsService {
         data: {
           name: data.name,
           description: data.description,
-          cost: data.cost,
-          price: data.price,
-          pricePerUnit: data.pricePerUnit,
+          purchasePrice: data.purchasePrice,
+          salePrice: data.salePrice,
+          unitId: data.unitId,
           stock: data.stock,
           unit: data.unit,
           category: {
@@ -62,9 +62,9 @@ export class ProductsService {
         data: {
           name: data.name,
           description: data.description,
-          cost: data.cost,
-          price: data.price,
-          pricePerUnit: data.pricePerUnit,
+          purchasePrice: data.purchasePrice,
+          salePrice: data.salePrice,
+          unitId: data.unitId,
           stock: data.stock,
           unit: data.unit,
           category: {
