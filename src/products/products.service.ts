@@ -84,35 +84,83 @@ export class ProductsService {
   }
 
   // Listar productos con filtros opcionales
-  async findAll(filters: {
-    name?: string;
-    categoryId?: number;
-    stockMin?: number;
-  }) {
-    const { name, categoryId, stockMin } = filters;
-    const products = await this.prisma.product.findMany({
-      where: {
-        name: name ? { contains: name, mode: 'insensitive' } : undefined,
-        categoryId: categoryId ?? undefined,
-        stock: stockMin != null ? { gte: stockMin } : undefined,
-      },
-      include: { category: true, unit: true },
-      orderBy: { name: 'asc' },
-    });
+// ...añade estos parámetros al destructuring:
+async findAll(filters: {
+  name?: string;
+  categoryId?: number | string;
+  unitId?: number | string;
+  onlyLowStock?: boolean | string;
+  salePriceMin?: number | string;
+  salePriceMax?: number | string;
+  page?: number | string;
+  pageSize?: number | string;
+}) {
+  let {
+    name,
+    categoryId,
+    unitId,
+    onlyLowStock,
+    salePriceMin,
+    salePriceMax,
+    page = 1,
+    pageSize = 10,
+  } = filters;
 
-    // Calcula utilidad y margen para cada producto
-    return products.map((p) => {
-      const utilidad = p.salePrice - p.purchasePrice;
-      const margen = p.purchasePrice
-        ? (utilidad / p.purchasePrice) * 100
-        : null;
-      return {
-        ...p,
-        utilidad,
-        margen,
-      };
-    });
+  page = Number(page) || 1;
+  pageSize = Number(pageSize) || 10;
+
+  // Convierte a número si es string
+  if (categoryId !== undefined) categoryId = Number(categoryId);
+  if (unitId !== undefined) unitId = Number(unitId);
+  if (salePriceMin !== undefined) salePriceMin = Number(salePriceMin);
+  if (salePriceMax !== undefined) salePriceMax = Number(salePriceMax);
+
+  // Filtros base
+  const where: any = {
+    name: name ? { contains: name, mode: 'insensitive' } : undefined,
+    categoryId: categoryId ?? undefined,
+    unitId: unitId ?? undefined,
+    salePrice: {
+      gte: salePriceMin ?? undefined,
+      lte: salePriceMax ?? undefined,
+    },
+  };
+
+  // Consulta el total antes de paginar
+  const total = await this.prisma.product.count({ where });
+
+  // Trae los productos paginados
+  let products = await this.prisma.product.findMany({
+    where,
+    include: { category: true, unit: true },
+    orderBy: { name: 'asc' },
+    skip: (page - 1) * pageSize,
+    take: pageSize,
+  });
+
+  // Stock bajo (filtrado en memoria)
+  if (onlyLowStock) {
+    products = products.filter((p) => p.stock <= (p.minStock ?? 0));
   }
+
+  // Calcula utilidad/margen en cada producto
+  const items = products.map((p) => ({
+    ...p,
+    utilidad: p.salePrice - p.purchasePrice,
+    margen: p.purchasePrice
+      ? ((p.salePrice - p.purchasePrice) / p.purchasePrice) * 100
+      : null,
+  }));
+
+  return {
+    items,
+    total,
+    page,
+    pageSize,
+  };
+}
+
+
 
   // Obtener un producto por ID
   async findOne(id: number) {
