@@ -1,57 +1,41 @@
-import { Controller, Get, Post, Put, Param, Body, Delete, ParseIntPipe } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Param,
+  Delete,
+  Put,
+  ParseIntPipe,
+} from '@nestjs/common';
 import { PurchaseService } from './purchase.service';
 
 @Controller('purchases')
 export class PurchaseController {
-  constructor(private readonly purchaseService: PurchaseService) {}
+  constructor(private readonly purchasesService: PurchaseService) {}
 
   @Get()
   findAll() {
-    return this.purchaseService.findAll();
+    return this.purchasesService.findAll();
   }
 
   @Get(':id')
   findOne(@Param('id', ParseIntPipe) id: number) {
-    return this.purchaseService.findOne(id);
+    return this.purchasesService.findOne(id);
   }
 
   @Post()
-  create(@Body() data: {
-    supplierId: number;
-    date?: Date;
-    totalAmount: number;
-    paidAmount: number;
-    isPaid: boolean;
-    details: {
-      productId: number;
-      quantity: number;
-      unitCost: number;
-    }[];
-  }) {
-    return this.purchaseService.create(data);
+  create(@Body() data: any) {
+    return this.purchasesService.create(data);
   }
 
   @Put(':id')
-  update(
-    @Param('id', ParseIntPipe) id: number,
-    @Body() data: {
-      supplierId: number;
-      date?: Date;
-      totalAmount: number;
-      paidAmount: number;
-      isPaid: boolean;
-      details: {
-        productId: number;
-        quantity: number;
-        unitCost: number;
-      }[];
-    }
-  ) {
-    return this.purchaseService.update(id, data);
+  update(@Param('id', ParseIntPipe) id: number, @Body() data: any) {
+    return this.purchasesService.update(id, data);
   }
 
-//   @Delete(':id')
-//   remove(@Param('id', ParseIntPipe) id: number) {
-//     return this.purchaseService.remove(id);
-//   }
+  @Delete(':id')
+  remove(@Param('id', ParseIntPipe) id: number) {
+    return this.purchasesService.remove(id);
+  }
 }

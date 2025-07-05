@@ -1,53 +1,66 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { Prisma } from '@prisma/client';
+import { CreatePurchaseDto } from './dto/create-purchase.dto';
 
 @Injectable()
 export class PurchaseService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private prisma: PrismaService) {}
 
-  async create(data: {
-    supplierId: number;
-    date?: Date; // opcional, si no se envía se usará el default de Prisma
-    totalAmount: number;
-    paidAmount: number;
-    isPaid: boolean;
-    details: {
-      productId: number;
-      quantity: number;
-      unitCost: number;
-    }[];
-  }) {
-    return this.prisma.purchase.create({
-      data: {
-        supplierId: data.supplierId,
-        date: data.date ?? undefined, // usa el default si no se especifica
-        totalAmount: data.totalAmount,
-        paidAmount: data.paidAmount,
-        isPaid: data.isPaid,
-        details: {
-          create: data.details.map((detail) => ({
-            productId: detail.productId,
-            quantity: detail.quantity,
-            unitCost: detail.unitCost,
-            totalCost: detail.quantity * detail.unitCost,
-          })),
+  async create(data: CreatePurchaseDto) {
+    const isPaid = data.isPaid ?? data.paidAmount >= data.totalAmount;
+
+    // Usamos una transacción para que todo ocurra en bloque
+    return this.prisma.$transaction(async (tx) => {
+      // 1. Crear la compra con sus detalles
+      const purchase = await tx.purchase.create({
+        data: {
+          supplierId: data.supplierId,
+          date: data.date,
+          totalAmount: data.totalAmount,
+          paidAmount: data.paidAmount,
+          isPaid,
+          details: {
+            create: data.details.map((d) => ({
+              productId: d.productId,
+              quantity: d.quantity,
+              unitCost: d.unitCost,
+              totalCost: d.quantity * d.unitCost,
+            })),
+          },
         },
-      },
-      include: {
-        details: true,
-        supplier: true,
-      },
+        include: {
+          supplier: true,
+          details: {
+            include: { product: true },
+          },
+        },
+      });
+
+      // 2. Sumar el stock a cada producto
+      await Promise.all(
+        data.details.map(async (d) => {
+          const updated = await tx.product.update({
+            where: { id: d.productId },
+            data: {
+              stock: { increment: d.quantity },
+            },
+          });
+          console.log(`Producto actualizado`, updated); // <-- Checa en consola si esto se imprime
+        }),
+      );
+
+      // 3. Retornar la compra creada con detalles y proveedor
+      return purchase;
     });
   }
 
   async findAll() {
     return this.prisma.purchase.findMany({
-      orderBy: { date: 'desc' },
       include: {
-        details: true,
         supplier: true,
+        details: { include: { product: true } },
       },
+      orderBy: { date: 'desc' },
     });
   }
 
@@ -55,55 +68,25 @@ export class PurchaseService {
     return this.prisma.purchase.findUnique({
       where: { id },
       include: {
-        details: true,
         supplier: true,
+        details: { include: { product: true } },
       },
     });
   }
 
-  async update(
-    id: number,
-    data: {
-      supplierId: number;
-      date?: Date;
-      totalAmount: number;
-      paidAmount: number;
-      isPaid: boolean;
-      details: {
-        id?: number; // en caso de edición futura
-        productId: number;
-        quantity: number;
-        unitCost: number;
-      }[];
-    },
-  ) {
-    // 1. Eliminar detalles anteriores
-    await this.prisma.purchaseDetail.deleteMany({
-      where: { purchaseId: id },
-    });
-
-    // 2. Actualizar la compra y recrear los detalles
+  async update(id: number, data: any) {
+    // Solo permite actualizar algunos campos (ejemplo: pagos)
     return this.prisma.purchase.update({
       where: { id },
       data: {
-        supplierId: data.supplierId,
-        date: data.date ?? undefined,
-        totalAmount: data.totalAmount,
         paidAmount: data.paidAmount,
         isPaid: data.isPaid,
-        details: {
-          create: data.details.map((detail) => ({
-            productId: detail.productId,
-            quantity: detail.quantity,
-            unitCost: detail.unitCost,
-            totalCost: detail.quantity * detail.unitCost,
-          })),
-        },
-      },
-      include: {
-        details: true,
-        supplier: true,
+        // Puedes permitir editar otros campos según tus reglas de negocio
       },
     });
+  }
+
+  async remove(id: number) {
+    return this.prisma.purchase.delete({ where: { id } });
   }
 }
