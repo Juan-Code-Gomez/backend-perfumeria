@@ -45,7 +45,6 @@ export class PurchaseService {
               stock: { increment: d.quantity },
             },
           });
-          console.log(`Producto actualizado`, updated); // <-- Checa en consola si esto se imprime
         }),
       );
 
