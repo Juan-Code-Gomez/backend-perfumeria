@@ -17,9 +17,10 @@ export class UserService {
     const hashedPassword = await bcrypt.hash(data.password, 10);
 
     // Si no me pasaron roleIds, por defecto conectamos al rol "USER"
-    const roleConnections = (data.roleIds && data.roleIds.length > 0)
-      ? data.roleIds.map((id) => ({ role: { connect: { id } } }))
-      : [{ role: { connect: { name: 'USER' } } }];
+    const roleConnections =
+      data.roleIds && data.roleIds.length > 0
+        ? data.roleIds.map((id) => ({ role: { connect: { id } } }))
+        : [{ role: { connect: { name: 'USER' } } }];
 
     return this.prisma.user.create({
       data: {
@@ -57,5 +58,39 @@ export class UserService {
       where: { username: username },
       include: { roles: { include: { role: true } } },
     });
+  }
+
+  async update(
+    id: number,
+    data: { name?: string; password?: string; roleIds?: number[] },
+  ) {
+    // Actualiza solo los campos enviados
+    const updateData: any = {};
+    if (data.name) updateData.name = data.name;
+    if (data.password)
+      updateData.password = await bcrypt.hash(data.password, 10);
+
+    // Actualizar roles (opcional)
+    if (data.roleIds && Array.isArray(data.roleIds)) {
+      // Primero elimina los roles existentes, luego agrega los nuevos
+      await this.prisma.userRole.deleteMany({ where: { userId: id } });
+      updateData.roles = {
+        create: data.roleIds.map((roleId) => ({
+          role: { connect: { id: roleId } },
+        })),
+      };
+    }
+
+    return this.prisma.user.update({
+      where: { id },
+      data: updateData,
+      include: { roles: { include: { role: true } } },
+    });
+  }
+
+  async remove(id: number) {
+    // Primero elimina los roles asociados para evitar errores de FK
+    await this.prisma.userRole.deleteMany({ where: { userId: id } });
+    return this.prisma.user.delete({ where: { id } });
   }
 }
