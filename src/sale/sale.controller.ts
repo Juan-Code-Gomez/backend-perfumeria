@@ -1,42 +1,23 @@
-// src/sale/sale.controller.ts
-import {
-  Controller,
-  Get,
-  Post,
-  Body,
-  Param,
-  Delete,
-  Put,
-  Query,
-  ParseIntPipe,
-} from '@nestjs/common';
+import { Controller, Get, Post, Body, Param } from '@nestjs/common';
 import { SaleService } from './sale.service';
+import { CreateSaleDto } from './dto/create-sale.dto';
 
 @Controller('sales')
 export class SaleController {
   constructor(private readonly saleService: SaleService) {}
 
   @Post()
-  create(@Body() body: any) {
-    return this.saleService.create(body);
+  async create(@Body() createSaleDto: CreateSaleDto) {
+    return this.saleService.create(createSaleDto);
   }
 
   @Get()
-  async findAll(@Query() query: any) {
-    return this.saleService.findAll(query);
-  }
-
-  @Put(':id')
-  update(@Param('id') id: string, @Body() body: any) {
-    return this.saleService.update(Number(id), body);
+  async findAll() {
+    return this.saleService.findAll();
   }
 
   @Get(':id')
-  async findOne(@Param('id', ParseIntPipe) id: number) {
-    return this.saleService.findOne(id);
-  }
-  @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.saleService.remove(Number(id));
+  async findOne(@Param('id') id: string) {
+    return this.saleService.findOne(Number(id));
   }
 }

@@ -1,134 +1,64 @@
-// src/sale/sale.service.ts
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { CreateSaleDto } from './dto/create-sale.dto';
 
 @Injectable()
 export class SaleService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private prisma: PrismaService) {}
 
-  async create(data: {
-    customerName: string;
-    totalAmount: number;
-    paidAmount: number;
-    isPaid: boolean;
-    details: {
-      productId: number;
-      quantity: number;
-      unitPrice: number;
-      totalPrice: number;
-    }[];
-  }) {
-    const sale = await this.prisma.sale.create({
+async create(data: CreateSaleDto) {
+  const isPaid = data.isPaid ?? (data.paidAmount >= data.totalAmount);
+
+  return this.prisma.$transaction(async (tx) => {
+    const sale = await tx.sale.create({
       data: {
+        date: data.date ? new Date(data.date) : new Date(),
         customerName: data.customerName,
         totalAmount: data.totalAmount,
         paidAmount: data.paidAmount,
-        isPaid: data.isPaid,
+        isPaid,
         details: {
-          create: data.details.map((item) => ({
-            productId: item.productId,
-            quantity: item.quantity,
-            unitPrice: item.unitPrice,
-            totalPrice: item.totalPrice,
+          create: data.details.map((d) => ({
+            productId: d.productId,
+            quantity: Number(d.quantity),
+            unitPrice: Number(d.unitPrice),
+            totalPrice: Number(d.quantity) * Number(d.unitPrice),
           })),
         },
       },
       include: {
-        details: true,
+        details: { include: { product: true } },
       },
     });
+
+    // Descontar el stock
+    await Promise.all(
+      data.details.map(async (d) => {
+        await tx.product.update({
+          where: { id: d.productId },
+          data: { stock: { decrement: Number(d.quantity) } },
+        });
+      }),
+    );
 
     return sale;
-  }
-
-  async update(
-    id: number,
-    data: {
-      customerName?: string;
-      totalAmount?: number;
-      paidAmount?: number;
-      isPaid?: boolean;
-      details?: {
-        productId: number;
-        quantity: number;
-        unitPrice: number;
-        totalPrice: number;
-      }[];
-    },
-  ) {
-    const sale = await this.prisma.sale.update({
-      where: { id },
-      data: {
-        customerName: data.customerName,
-        totalAmount: data.totalAmount,
-        paidAmount: data.paidAmount,
-        isPaid: data.isPaid,
-        details: {
-          deleteMany: {}, // Clear existing details
-          create:
-            data.details?.map((item) => ({
-              productId: item.productId,
-              quantity: item.quantity,
-              unitPrice: item.unitPrice,
-              totalPrice: item.totalPrice,
-            })) || [],
-        },
-      },
-      include: {
-        details: true,
-      },
-    });
-    return sale;
-  }
-
-  async findAll(query: {
-    customerName?: string;
-    startDate?: string;
-    endDate?: string;
-    isPaid?: boolean;
-  }) {
-    const { customerName, startDate, endDate, isPaid } = query;
-
-    return this.prisma.sale.findMany({
-      where: {
-        customerName: customerName
-          ? { contains: customerName, mode: 'insensitive' }
-          : undefined,
-        isPaid: isPaid !== undefined ? isPaid : undefined,
-        date: {
-          gte: startDate ? new Date(startDate) : undefined,
-          lte: endDate ? new Date(endDate) : undefined,
-        },
-      },
-      include: {
-        details: {
-          include: {
-            product: true,
-          },
-        },
-      },
-      orderBy: {
-        date: 'desc',
-      },
-    });
-  }
-
-async findOne(id: number) {
-  return this.prisma.sale.findUnique({
-    where: { id },
-    include: {
-      details: {
-        include: {
-          product: true,
-        },
-      },
-    },
   });
 }
+  async findAll() {
+    return this.prisma.sale.findMany({
+      include: {
+        details: { include: { product: true } },
+      },
+      orderBy: { date: 'desc' },
+    });
+  }
 
-  async remove(id: number) {
-    return this.prisma.sale.delete({
+  async findOne(id: number) {
+    return this.prisma.sale.findUnique({
       where: { id },
+      include: {
+        details: { include: { product: true } },
+      },
     });
   }
 }
