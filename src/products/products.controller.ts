@@ -9,15 +9,22 @@ import {
   UseGuards,
   ParseIntPipe,
   Query,
+  UseInterceptors,
+  UploadedFile,
 } from '@nestjs/common';
+import * as multer from 'multer';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { ProductsService } from './products.service';
 // import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 // import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { QueryProductDto } from './dto/query-product.dto';
 import { CreateProductMovementDto } from './dto/create-product-movement.dto';
+import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
+import { RolesGuard } from 'src/auth/guards/roles.guard';
 
 @Controller('products')
+@UseGuards(JwtAuthGuard, RolesGuard)
 export class ProductsController {
   constructor(private readonly productsService: ProductsService) {}
 
@@ -70,5 +77,29 @@ export class ProductsController {
   @Delete(':id')
   remove(@Param('id', ParseIntPipe) id: number) {
     return this.productsService.remove(id);
+  }
+
+  @Post('bulk-upload')
+  @Roles('ADMIN')
+  @UseInterceptors(
+    FileInterceptor('file', {
+      limits: { fileSize: 2 * 1024 * 1024 }, // 2 MB (ajusta si quieres)
+      fileFilter: (req, file, cb) => {
+        // Solo permite archivos Excel
+        if (
+          file.mimetype ===
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
+          file.mimetype === 'application/vnd.ms-excel'
+        ) {
+          cb(null, true);
+        } else {
+          cb(new Error('Solo se permiten archivos .xlsx'), false);
+        }
+      },
+    }),
+  )
+  async bulkUploadProducts(@UploadedFile() file: Express.Multer.File) {
+    // Aquí llamas tu servicio ya listo
+    return this.productsService.bulkUploadProducts(file);
   }
 }

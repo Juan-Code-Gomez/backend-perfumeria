@@ -1,8 +1,9 @@
 // src/products/products.service.ts
 
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateProductMovementDto } from './dto/create-product-movement.dto';
+import * as XLSX from 'xlsx';
 
 @Injectable()
 export class ProductsService {
@@ -84,83 +85,81 @@ export class ProductsService {
   }
 
   // Listar productos con filtros opcionales
-// ...añade estos parámetros al destructuring:
-async findAll(filters: {
-  name?: string;
-  categoryId?: number | string;
-  unitId?: number | string;
-  onlyLowStock?: boolean | string;
-  salePriceMin?: number | string;
-  salePriceMax?: number | string;
-  page?: number | string;
-  pageSize?: number | string;
-}) {
-  let {
-    name,
-    categoryId,
-    unitId,
-    onlyLowStock,
-    salePriceMin,
-    salePriceMax,
-    page = 1,
-    pageSize = 10,
-  } = filters;
+  // ...añade estos parámetros al destructuring:
+  async findAll(filters: {
+    name?: string;
+    categoryId?: number | string;
+    unitId?: number | string;
+    onlyLowStock?: boolean | string;
+    salePriceMin?: number | string;
+    salePriceMax?: number | string;
+    page?: number | string;
+    pageSize?: number | string;
+  }) {
+    let {
+      name,
+      categoryId,
+      unitId,
+      onlyLowStock,
+      salePriceMin,
+      salePriceMax,
+      page = 1,
+      pageSize = 10,
+    } = filters;
 
-  page = Number(page) || 1;
-  pageSize = Number(pageSize) || 10;
+    page = Number(page) || 1;
+    pageSize = Number(pageSize) || 10;
 
-  // Convierte a número si es string
-  if (categoryId !== undefined) categoryId = Number(categoryId);
-  if (unitId !== undefined) unitId = Number(unitId);
-  if (salePriceMin !== undefined) salePriceMin = Number(salePriceMin);
-  if (salePriceMax !== undefined) salePriceMax = Number(salePriceMax);
+    // Convierte a número si es string
+    if (categoryId !== undefined) categoryId = Number(categoryId);
+    if (unitId !== undefined) unitId = Number(unitId);
+    if (salePriceMin !== undefined) salePriceMin = Number(salePriceMin);
+    if (salePriceMax !== undefined) salePriceMax = Number(salePriceMax);
 
-  // Filtros base
-  const where: any = {
-    name: name ? { contains: name, mode: 'insensitive' } : undefined,
-    categoryId: categoryId ?? undefined,
-    unitId: unitId ?? undefined,
-    salePrice: {
-      gte: salePriceMin ?? undefined,
-      lte: salePriceMax ?? undefined,
-    },
-  };
+    // Filtros base
+    const where: any = {
+      name: name ? { contains: name, mode: 'insensitive' } : undefined,
+      categoryId: categoryId ?? undefined,
+      unitId: unitId ?? undefined,
+      salePrice: {
+        gte: salePriceMin ?? undefined,
+        lte: salePriceMax ?? undefined,
+      },
+    };
 
-  // Consulta el total antes de paginar
-  const total = await this.prisma.product.count({ where });
+    // Consulta el total antes de paginar
+    const total = await this.prisma.product.count({ where });
 
-  // Trae los productos paginados
-  let products = await this.prisma.product.findMany({
-    where,
-    include: { category: true, unit: true },
-    orderBy: { name: 'asc' },
-    skip: (page - 1) * pageSize,
-    take: pageSize,
-  });
+    // Trae los productos paginados
+    let products = await this.prisma.product.findMany({
+      where,
+      include: { category: true, unit: true },
+      orderBy: { name: 'asc' },
+      skip: (page - 1) * pageSize,
+      take: pageSize,
+    });
 
-  // Stock bajo (filtrado en memoria)
-  if (onlyLowStock) {
-    products = products.filter((p) => p.stock <= (p.minStock ?? 0));
+    // Stock bajo (filtrado en memoria)
+    if (onlyLowStock) {
+      products = products.filter((p) => p.stock <= (p.minStock ?? 0));
+    }
+
+    // Calcula utilidad/margen en cada producto
+    const items = products.map((p) => ({
+      ...p,
+      utilidad: p.salePrice - p.purchasePrice,
+      margen: p.purchasePrice
+        ? ((p.salePrice - p.purchasePrice) / p.purchasePrice) * 100
+        : null,
+    }));
+
+    return {
+      items,
+      total,
+      page,
+      pageSize,
+    };
   }
-
-  // Calcula utilidad/margen en cada producto
-  const items = products.map((p) => ({
-    ...p,
-    utilidad: p.salePrice - p.purchasePrice,
-    margen: p.purchasePrice
-      ? ((p.salePrice - p.purchasePrice) / p.purchasePrice) * 100
-      : null,
-  }));
-
-  return {
-    items,
-    total,
-    page,
-    pageSize,
-  };
-}
-
-
 
   // Obtener un producto por ID
   async findOne(id: number) {
@@ -210,5 +209,153 @@ async findAll(filters: {
     return this.prisma.product.delete({
       where: { id },
     });
+  }
+
+  async bulkUploadProducts(file: Express.Multer.File) {
+    // 1. Lee y tipa los datos
+    const workbook = XLSX.read(file.buffer, { type: 'buffer' });
+    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+    const rows: any[] = XLSX.utils.sheet_to_json(sheet);
+
+    const errores: any[] = [];
+    let productosCreados = 0,
+      productosActualizados = 0,
+      comprasCreadas = 0;
+
+    // Agrupa productos por proveedor
+    const comprasPorProveedor: Record<string, any[]> = {};
+    rows.forEach((row, i) => {
+      if (!row['Proveedor']) {
+        errores.push({ fila: i + 2, error: 'Falta proveedor' });
+        return;
+      }
+      if (!comprasPorProveedor[row['Proveedor']])
+        comprasPorProveedor[row['Proveedor']] = [];
+      comprasPorProveedor[row['Proveedor']].push({ ...row, _fila: i + 2 });
+    });
+
+    for (const proveedorNombre in comprasPorProveedor) {
+      const proveedorDB = await this.prisma.supplier.findFirst({
+        where: { name: proveedorNombre },
+      });
+      if (!proveedorDB) {
+        errores.push({
+          proveedor: proveedorNombre,
+          error: `Proveedor no existe`,
+        });
+        continue;
+      }
+
+      const detalles: any[] = [];
+
+      for (const row of comprasPorProveedor[proveedorNombre]) {
+        // Valida campos obligatorios
+        if (!row['Nombre producto'] || !row['Categoría'] || !row['Unidad']) {
+          errores.push({
+            fila: row._fila,
+            error:
+              'Faltan campos obligatorios (Nombre producto, Categoría o Unidad)',
+          });
+          continue;
+        }
+
+        // Buscar categoría
+        const categoria = await this.prisma.category.findFirst({
+          where: { name: row['Categoría'] },
+        });
+        if (!categoria) {
+          errores.push({
+            fila: row._fila,
+            error: `Categoría no existe: ${row['Categoría']}`,
+          });
+          continue;
+        }
+
+        // Buscar unidad
+        const unidad = await this.prisma.unit.findFirst({
+          where: { name: row['Unidad'] },
+        });
+        if (!unidad) {
+          errores.push({
+            fila: row._fila,
+            error: `Unidad no existe: ${row['Unidad']}`,
+          });
+          continue;
+        }
+
+        // Buscar producto por nombre
+        const producto = await this.prisma.product.findFirst({
+          where: {
+            name: row['Nombre producto'],
+            categoryId: categoria.id,
+            unitId: unidad.id,
+          },
+        });
+
+        let productoId: number;
+        const stockToAdd = Number(row['Stock inicial']) || 0;
+
+        if (producto) {
+          // Si existe, solo actualiza el stock
+          await this.prisma.product.update({
+            where: { id: producto.id },
+            data: { stock: { increment: stockToAdd } },
+          });
+          productoId = producto.id;
+          productosActualizados++;
+        } else {
+          console.log('Row keys:', Object.keys(row));
+          // Si NO existe, crea el producto
+          const nuevo = await this.prisma.product.create({
+            data: {
+              name: row['Nombre producto'],
+              description: row['Descripción'] || '',
+              purchasePrice: Number(row['Precio compra']),
+              salePrice: Number(row['Precio venta']),
+              stock: stockToAdd,
+              minStock: Number(row['Stock mínimo']) || null,
+              imageUrl: row['Imagen URL'] || null,
+              unit: { connect: { id: unidad.id } },
+              category: { connect: { id: categoria.id } },
+            },
+          });
+          productoId = nuevo.id;
+          productosCreados++;
+        }
+
+        // Prepara detalle de compra (si hay stock > 0)
+        if (stockToAdd > 0) {
+          detalles.push({
+            productId: productoId,
+            quantity: stockToAdd,
+            unitCost: Number(row['Precio compra']),
+            totalCost: stockToAdd * Number(row['Precio compra']),
+          });
+        }
+      }
+
+      // Crea compra asociada si hay productos con stock > 0
+      if (detalles.length > 0) {
+        await this.prisma.purchase.create({
+          data: {
+            supplierId: proveedorDB.id,
+            date: new Date(),
+            totalAmount: detalles.reduce((sum, d) => sum + d.totalCost, 0),
+            paidAmount: 0,
+            isPaid: false,
+            details: { create: detalles },
+          },
+        });
+        comprasCreadas++;
+      }
+    }
+
+    return {
+      mensaje: 'Carga finalizada',
+      productosCreados,
+      productosActualizados,
+      comprasCreadas,
+      errores,
+    };
   }
 }
