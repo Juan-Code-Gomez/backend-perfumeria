@@ -111,6 +111,7 @@ model Sale {
   customerName String?
   totalAmount  Float
   paidAmount   Float
+  paymentMethod String? // "Efectivo", "Transferencia", "Tarjeta"
   isPaid       Boolean      @default(false)
   details      SaleDetail[]
   createdAt    DateTime     @default(now())
