@@ -12,6 +12,8 @@ import { PurchaseModule } from './purchase/purchase.module';
 import { SaleModule } from './sale/sale.module';
 import { RoleModule } from './role/role.module';
 import { UnitModule } from './unit/unit.module';
+import { CashClosingModule } from './cash-closing/cash-closing.module';
+import { ExpenseModule } from './expense/expense.module';
 
 @Module({
   imports: [
@@ -26,6 +28,8 @@ import { UnitModule } from './unit/unit.module';
     SaleModule,
     RoleModule,
     UnitModule,
+    CashClosingModule,
+    ExpenseModule
   ],
   controllers: [AppController],
   providers: [AppService],

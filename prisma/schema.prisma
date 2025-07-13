@@ -16,6 +16,7 @@ model User {
   roles     UserRole[]
   createdAt DateTime   @default(now())
   updatedAt DateTime   @updatedAt
+  cashClosings CashClosing[] @relation("UserCashClosings")
 }
 
 model Role {
@@ -146,4 +147,37 @@ enum MovementType {
   IN // Entrada (compra)
   OUT // Salida (venta)
   ADJUST // Ajuste manual
+}
+
+model CashClosing {
+  id            Int      @id @default(autoincrement())
+  date          DateTime @unique // Un cierre por día
+  openingCash   Float    // Saldo inicial (si se lleva control)
+  closingCash   Float    // Saldo final contado por el cajero
+  systemCash    Float    // Saldo calculado por el sistema (ventas - gastos + apertura)
+  difference    Float    // Diferencia (closingCash - systemCash)
+  totalSales    Float    // Ventas del día (suma total)
+  cashSales     Float    // Ventas en efectivo
+  cardSales     Float    // Ventas por tarjeta
+  transferSales Float    // Ventas por transferencia
+  creditSales   Float    // Ventas a crédito
+  totalIncome   Float    // Ingresos extra
+  totalExpense  Float    // Gastos del día (egresos)
+  totalPayments Float    // Pagos a proveedores o abonos
+  notes         String?  // Observaciones del cierre
+  createdAt     DateTime @default(now())
+  createdById   Int?     // Usuario que hizo el cierre (opcional)
+  createdBy     User?    @relation("UserCashClosings", fields: [createdById], references: [id])
+}
+
+
+model Expense {
+  id          Int      @id @default(autoincrement())
+  date        DateTime @default(now())
+  amount      Float
+  description String
+  category    String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  // Puedes agregar más campos según tu necesidad
 }
