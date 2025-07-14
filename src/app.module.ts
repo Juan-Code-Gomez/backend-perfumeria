@@ -14,6 +14,7 @@ import { RoleModule } from './role/role.module';
 import { UnitModule } from './unit/unit.module';
 import { CashClosingModule } from './cash-closing/cash-closing.module';
 import { ExpenseModule } from './expense/expense.module';
+import { DashboardModule } from './dashboard/dashboard.module';
 
 @Module({
   imports: [
@@ -29,7 +30,8 @@ import { ExpenseModule } from './expense/expense.module';
     RoleModule,
     UnitModule,
     CashClosingModule,
-    ExpenseModule
+    ExpenseModule,
+    DashboardModule
   ],
   controllers: [AppController],
   providers: [AppService],

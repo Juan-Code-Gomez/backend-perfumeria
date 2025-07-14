@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateSaleDto } from './dto/create-sale.dto';
+import { CreateSalePaymentDto } from './dto/create-sale-payment.dto';
 
 @Injectable()
 export class SaleService {
@@ -81,6 +82,79 @@ export class SaleService {
       include: {
         details: { include: { product: true } },
       },
+    });
+  }
+
+  async addPayment(saleId: number, dto: CreateSalePaymentDto) {
+    return this.prisma.$transaction(async (tx) => {
+      // 1. Crear el abono
+      const payment = await tx.salePayment.create({
+        data: {
+          saleId,
+          amount: dto.amount,
+          date: dto.date ? new Date(dto.date) : new Date(),
+          method: dto.method,
+          note: dto.note,
+        },
+      });
+
+      // 2. Recalcular abonos acumulados
+      const payments = await tx.salePayment.findMany({
+        where: { saleId },
+        select: { amount: true },
+      });
+      const totalPaid = payments.reduce((acc, p) => acc + p.amount, 0);
+
+      // 3. Marcar como pagada si ya cubre el total
+      const sale = await tx.sale.findUnique({ where: { id: saleId } });
+      if (sale && !sale.isPaid && totalPaid >= sale.totalAmount) {
+        await tx.sale.update({
+          where: { id: saleId },
+          data: {
+            paidAmount: totalPaid,
+            isPaid: true,
+          },
+        });
+      } else {
+        await tx.sale.update({
+          where: { id: saleId },
+          data: {
+            paidAmount: totalPaid,
+          },
+        });
+      }
+
+      return payment;
+    });
+  }
+
+  async getPayments(saleId: number) {
+    return this.prisma.salePayment.findMany({
+      where: { saleId },
+      orderBy: { date: 'asc' }, // o 'desc' según prefieras
+      select: {
+        id: true,
+        amount: true,
+        date: true,
+        method: true,
+        note: true,
+        createdAt: true,
+      },
+    });
+  }
+
+  async getPendingSales() {
+    const sales = await this.prisma.sale.findMany({
+      include: { payments: true },
+      where: { isPaid: false },
+      orderBy: { date: 'desc' },
+    });
+    // Opcional: calcula el saldo pendiente y devuélvelo en la respuesta
+    return sales.map((sale) => {
+      const sumAbonos = sale.payments.reduce((acc, p) => acc + p.amount, 0);
+      const totalPaid = (sale.paidAmount || 0) + sumAbonos;
+      const pending = sale.totalAmount - totalPaid;
+      return { ...sale, totalPaid, pending };
     });
   }
 }

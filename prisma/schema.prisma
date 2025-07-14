@@ -117,6 +117,7 @@ model Sale {
   details      SaleDetail[]
   createdAt    DateTime     @default(now())
   updatedAt    DateTime     @updatedAt
+  payments    SalePayment[] // relación inversa
 }
 
 model SaleDetail {
@@ -180,4 +181,16 @@ model Expense {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   // Puedes agregar más campos según tu necesidad
+}
+
+
+model SalePayment {
+  id        Int      @id @default(autoincrement())
+  saleId    Int
+  sale      Sale     @relation(fields: [saleId], references: [id])
+  amount    Float    // Monto del abono
+  date      DateTime @default(now())
+  method    String?  // "Efectivo", "Transferencia", etc. (opcional)
+  note      String?  // Observaciones (opcional)
+  createdAt DateTime @default(now())
 }

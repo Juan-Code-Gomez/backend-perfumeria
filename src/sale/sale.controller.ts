@@ -1,10 +1,16 @@
 import { Controller, Get, Post, Body, Param, Query } from '@nestjs/common';
 import { SaleService } from './sale.service';
 import { CreateSaleDto } from './dto/create-sale.dto';
+import { CreateSalePaymentDto } from './dto/create-sale-payment.dto';
 
 @Controller('sales')
 export class SaleController {
   constructor(private readonly saleService: SaleService) {}
+
+  @Get('pending')
+  async getPendingSales() {
+    return this.saleService.getPendingSales();
+  }
 
   @Post()
   async create(@Body() createSaleDto: CreateSaleDto) {
@@ -22,5 +28,16 @@ export class SaleController {
   @Get(':id')
   async findOne(@Param('id') id: string) {
     return this.saleService.findOne(Number(id));
+  }
+
+  @Post(':id/payments')
+  async addPayment(@Param('id') id: string, @Body() dto: CreateSalePaymentDto) {
+    return this.saleService.addPayment(Number(id), dto);
+  }
+
+  // GET /sales/:id/payments
+  @Get(':id/payments')
+  async getPayments(@Param('id') id: string) {
+    return this.saleService.getPayments(Number(id));
   }
 }
