@@ -36,7 +36,7 @@ export class SaleService {
       // Descontar el stock
       await Promise.all(
         data.details.map(async (d) => {
-          await tx.product.update({
+          await tx.product.update({ 
             where: { id: d.productId },
             data: { stock: { decrement: Number(d.quantity) } },
           });
@@ -51,13 +51,11 @@ export class SaleService {
     const where: any = {};
 
     if (dateFrom && dateTo) {
-      // Filtra entre ambas fechas, todo el día (de 00:00 a 23:59)
       where.date = {
         gte: new Date(`${dateFrom}T00:00:00.000Z`),
         lte: new Date(`${dateTo}T23:59:59.999Z`),
       };
     } else {
-      // Si no hay filtro, devuelve las ventas del día actual
       const today = new Date();
       const y = today.getFullYear();
       const m = String(today.getMonth() + 1).padStart(2, '0');
@@ -67,22 +65,53 @@ export class SaleService {
       where.date = { gte: start, lte: end };
     }
 
-    return this.prisma.sale.findMany({
+    const ventas = await this.prisma.sale.findMany({
       where,
       include: {
         details: { include: { product: true } },
+        payments: true, // Incluye los abonos
       },
       orderBy: { date: 'desc' },
+    });
+
+    // Mapea cada venta y suma los abonos
+    return ventas.map((v) => {
+      const totalPaid = v.payments.reduce(
+        (sum, p) => sum + Number(p.amount),
+        0,
+      );
+      const pending = v.totalAmount - totalPaid;
+      return {
+        ...v,
+        paidAmount: totalPaid,
+        pending,
+        isPaid: totalPaid >= v.totalAmount,
+      };
     });
   }
 
   async findOne(id: number) {
-    return this.prisma.sale.findUnique({
+    const sale = await this.prisma.sale.findUnique({
       where: { id },
       include: {
         details: { include: { product: true } },
+        payments: true,
       },
     });
+
+    if (!sale) return null;
+
+    const totalPaid = sale.payments.reduce(
+      (sum, p) => sum + Number(p.amount),
+      0,
+    );
+    const pending = sale.totalAmount - totalPaid;
+    return {
+      ...sale,
+      paidAmount: totalPaid,
+      pending,
+      isPaid: totalPaid >= sale.totalAmount,
+    };
   }
 
   async addPayment(saleId: number, dto: CreateSalePaymentDto) {
