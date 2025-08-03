@@ -1,4 +1,13 @@
-import { Controller, Post, Body, Req, Get, Param, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Body,
+  Req,
+  Get,
+  Param,
+  UseGuards,
+  Query,
+} from '@nestjs/common';
 import { CashClosingService } from './cash-closing.service';
 import { CreateCashClosingDto } from './dto/create-cash-closing.dto';
 // Si usas autenticación, puedes usar JwtAuthGuard aquí
@@ -24,5 +33,10 @@ export class CashClosingController {
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.cashClosingService.findOne(Number(id));
+  }
+
+  @Get('summary')
+  async getSummary(@Query('date') date: string) {
+    return this.cashClosingService.getSummary(date);
   }
 }

@@ -212,7 +212,6 @@ export class ProductsService {
   }
 
   async bulkUploadProducts(file: Express.Multer.File) {
-    // 1. Lee y tipa los datos
     const workbook = XLSX.read(file.buffer, { type: 'buffer' });
     const sheet = workbook.Sheets[workbook.SheetNames[0]];
     const rows: any[] = XLSX.utils.sheet_to_json(sheet);
@@ -222,7 +221,7 @@ export class ProductsService {
       productosActualizados = 0,
       comprasCreadas = 0;
 
-    // Agrupa productos por proveedor
+    // Agrupar productos por proveedor como ya lo tienes
     const comprasPorProveedor: Record<string, any[]> = {};
     rows.forEach((row, i) => {
       if (!row['Proveedor']) {
@@ -249,7 +248,7 @@ export class ProductsService {
       const detalles: any[] = [];
 
       for (const row of comprasPorProveedor[proveedorNombre]) {
-        // Valida campos obligatorios
+        // Validar campos obligatorios
         if (!row['Nombre producto'] || !row['Categoría'] || !row['Unidad']) {
           errores.push({
             fila: row._fila,
@@ -283,7 +282,40 @@ export class ProductsService {
           continue;
         }
 
-        // Buscar producto por nombre
+        // *** VALIDACIONES PARA ESENCIAS ***
+        if (categoria.name.toLowerCase().includes('esencia')) {
+          // Solo permitir unidad gramos (puedes personalizarlo si usas "gramo" o "g" también)
+          if (!unidad.name.toLowerCase().includes('gram')) {
+            errores.push({
+              fila: row._fila,
+              error: `Para productos de categoría "Esencias" solo se permite la unidad "gramos".`,
+            });
+            continue;
+          }
+        }
+
+        // Validar precios y stock
+        const stockToAdd = Number(row['Stock inicial']);
+        const precioCompra = Number(row['Precio compra']);
+        const precioVenta = Number(row['Precio venta']);
+
+        if (
+          isNaN(stockToAdd) ||
+          stockToAdd < 0 ||
+          isNaN(precioCompra) ||
+          precioCompra <= 0 ||
+          isNaN(precioVenta) ||
+          precioVenta <= 0
+        ) {
+          errores.push({
+            fila: row._fila,
+            error:
+              'Stock inicial, precio de compra y precio de venta deben ser números positivos',
+          });
+          continue;
+        }
+
+        // Buscar producto por nombre + categoría + unidad
         const producto = await this.prisma.product.findFirst({
           where: {
             name: row['Nombre producto'],
@@ -293,7 +325,6 @@ export class ProductsService {
         });
 
         let productoId: number;
-        const stockToAdd = Number(row['Stock inicial']) || 0;
 
         if (producto) {
           // Si existe, solo actualiza el stock
@@ -304,14 +335,13 @@ export class ProductsService {
           productoId = producto.id;
           productosActualizados++;
         } else {
-          console.log('Row keys:', Object.keys(row));
-          // Si NO existe, crea el producto
+          // Crear producto
           const nuevo = await this.prisma.product.create({
             data: {
               name: row['Nombre producto'],
               description: row['Descripción'] || '',
-              purchasePrice: Number(row['Precio compra']),
-              salePrice: Number(row['Precio venta']),
+              purchasePrice: precioCompra,
+              salePrice: precioVenta,
               stock: stockToAdd,
               minStock: Number(row['Stock mínimo']) || null,
               imageUrl: row['Imagen URL'] || null,
@@ -328,8 +358,8 @@ export class ProductsService {
           detalles.push({
             productId: productoId,
             quantity: stockToAdd,
-            unitCost: Number(row['Precio compra']),
-            totalCost: stockToAdd * Number(row['Precio compra']),
+            unitCost: precioCompra,
+            totalCost: stockToAdd * precioCompra,
           });
         }
       }

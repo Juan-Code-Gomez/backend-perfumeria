@@ -8,7 +8,13 @@ export class SaleService {
   constructor(private prisma: PrismaService) {}
 
   async create(data: CreateSaleDto) {
-    const isPaid = data.isPaid ?? data.paidAmount >= data.totalAmount;
+    let isPaid = data.isPaid ?? false;
+    let paidAmount = Number(data.paidAmount) || 0;
+
+    // Si la venta es de contado y está marcada como pagada, el paidAmount es el total
+    if (isPaid) {
+      paidAmount = data.totalAmount;
+    }
 
     return this.prisma.$transaction(async (tx) => {
       const sale = await tx.sale.create({
@@ -16,7 +22,7 @@ export class SaleService {
           date: data.date ? new Date(data.date) : new Date(),
           customerName: data.customerName,
           totalAmount: data.totalAmount,
-          paidAmount: data.paidAmount,
+          paidAmount: paidAmount,
           isPaid,
           paymentMethod: data.paymentMethod,
           details: {
@@ -36,7 +42,7 @@ export class SaleService {
       // Descontar el stock
       await Promise.all(
         data.details.map(async (d) => {
-          await tx.product.update({ 
+          await tx.product.update({
             where: { id: d.productId },
             data: { stock: { decrement: Number(d.quantity) } },
           });
@@ -76,16 +82,24 @@ export class SaleService {
 
     // Mapea cada venta y suma los abonos
     return ventas.map((v) => {
-      const totalPaid = v.payments.reduce(
-        (sum, p) => sum + Number(p.amount),
-        0,
-      );
-      const pending = v.totalAmount - totalPaid;
+      // Si hay abonos, paidAmount = suma de abonos
+      let paidAmount = v.payments.reduce((sum, p) => sum + Number(p.amount), 0);
+      // Si no hay abonos y la venta está pagada, el paidAmount es el totalAmount
+      if ((!v.payments || v.payments.length === 0) && v.isPaid) {
+        paidAmount = v.totalAmount;
+      }
+      // Si no hay abonos y no está pagada, el paidAmount es 0
+      if ((!v.payments || v.payments.length === 0) && !v.isPaid) {
+        paidAmount = 0;
+      }
+      const pending = Math.max(0, v.totalAmount - paidAmount);
+      // isPaid se calcula: si tiene abonos suficientes o ya estaba marcada pagada
+      const isPaid = v.isPaid || paidAmount >= v.totalAmount;
       return {
         ...v,
-        paidAmount: totalPaid,
+        paidAmount,
         pending,
-        isPaid: totalPaid >= v.totalAmount,
+        isPaid,
       };
     });
   }
@@ -101,16 +115,23 @@ export class SaleService {
 
     if (!sale) return null;
 
-    const totalPaid = sale.payments.reduce(
+    let paidAmount = sale.payments.reduce(
       (sum, p) => sum + Number(p.amount),
       0,
     );
-    const pending = sale.totalAmount - totalPaid;
+    if ((!sale.payments || sale.payments.length === 0) && sale.isPaid) {
+      paidAmount = sale.totalAmount;
+    }
+    if ((!sale.payments || sale.payments.length === 0) && !sale.isPaid) {
+      paidAmount = 0;
+    }
+    const pending = Math.max(0, sale.totalAmount - paidAmount);
+    const isPaid = sale.isPaid || paidAmount >= sale.totalAmount;
     return {
       ...sale,
-      paidAmount: totalPaid,
+      paidAmount,
       pending,
-      isPaid: totalPaid >= sale.totalAmount,
+      isPaid,
     };
   }
 
@@ -160,7 +181,7 @@ export class SaleService {
   async getPayments(saleId: number) {
     return this.prisma.salePayment.findMany({
       where: { saleId },
-      orderBy: { date: 'asc' }, // o 'desc' según prefieras
+      orderBy: { date: 'asc' },
       select: {
         id: true,
         amount: true,
@@ -178,10 +199,9 @@ export class SaleService {
       where: { isPaid: false },
       orderBy: { date: 'desc' },
     });
-    // Opcional: calcula el saldo pendiente y devuélvelo en la respuesta
     return sales.map((sale) => {
-      const sumAbonos = sale.payments.reduce((acc, p) => acc + p.amount, 0);
-      const totalPaid = (sale.paidAmount || 0) + sumAbonos;
+      let totalPaid = (sale.paidAmount || 0) +
+        sale.payments.reduce((acc, p) => acc + p.amount, 0);
       const pending = sale.totalAmount - totalPaid;
       return { ...sale, totalPaid, pending };
     });
