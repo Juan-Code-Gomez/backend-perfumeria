@@ -21,6 +21,7 @@ export class SaleService {
         data: {
           date: data.date ? new Date(data.date) : new Date(),
           customerName: data.customerName,
+          clientId: data.clientId,
           totalAmount: data.totalAmount,
           paidAmount: paidAmount,
           isPaid,
@@ -76,6 +77,7 @@ export class SaleService {
       include: {
         details: { include: { product: true } },
         payments: true, // Incluye los abonos
+        client: true,
       },
       orderBy: { date: 'desc' },
     });
@@ -95,11 +97,16 @@ export class SaleService {
       const pending = Math.max(0, v.totalAmount - paidAmount);
       // isPaid se calcula: si tiene abonos suficientes o ya estaba marcada pagada
       const isPaid = v.isPaid || paidAmount >= v.totalAmount;
+
+      const displayName = v.client?.name ?? v.customerName;
+
       return {
         ...v,
         paidAmount,
         pending,
         isPaid,
+        customerName: displayName, // siempre usar displayName
+        client: v.client,
       };
     });
   }
@@ -110,6 +117,7 @@ export class SaleService {
       include: {
         details: { include: { product: true } },
         payments: true,
+        client: true,
       },
     });
 
@@ -127,11 +135,16 @@ export class SaleService {
     }
     const pending = Math.max(0, sale.totalAmount - paidAmount);
     const isPaid = sale.isPaid || paidAmount >= sale.totalAmount;
+
+    const displayName = sale.client?.name ?? sale.customerName;
+
     return {
       ...sale,
       paidAmount,
       pending,
       isPaid,
+      customerName: displayName,
+      client: sale.client,
     };
   }
 
@@ -200,7 +213,8 @@ export class SaleService {
       orderBy: { date: 'desc' },
     });
     return sales.map((sale) => {
-      let totalPaid = (sale.paidAmount || 0) +
+      let totalPaid =
+        (sale.paidAmount || 0) +
         sale.payments.reduce((acc, p) => acc + p.amount, 0);
       const pending = sale.totalAmount - totalPaid;
       return { ...sale, totalPaid, pending };

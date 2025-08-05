@@ -15,6 +15,7 @@ import { UnitModule } from './unit/unit.module';
 import { CashClosingModule } from './cash-closing/cash-closing.module';
 import { ExpenseModule } from './expense/expense.module';
 import { DashboardModule } from './dashboard/dashboard.module';
+import { ClientsModule } from './clients/clients.module';
 
 @Module({
   imports: [
@@ -31,7 +32,8 @@ import { DashboardModule } from './dashboard/dashboard.module';
     UnitModule,
     CashClosingModule,
     ExpenseModule,
-    DashboardModule
+    DashboardModule,
+    ClientsModule
   ],
   controllers: [AppController],
   providers: [AppService],

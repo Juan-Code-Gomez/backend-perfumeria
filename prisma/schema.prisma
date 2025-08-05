@@ -106,12 +106,27 @@ model PurchaseDetail {
   updatedAt  DateTime @updatedAt
 }
 
+model Client {
+  id            Int      @id @default(autoincrement())
+  name          String
+  phone         String?  // Opcional
+  email         String?  // Opcional
+  document      String?  // Opcional (CC, Nit, etc.)
+  address       String?  // Opcional
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  sales         Sale[]   // relación con ventas
+}
+
 model Sale {
   id           Int          @id @default(autoincrement())
   date         DateTime     @default(now())
   customerName String?
   totalAmount  Float
   paidAmount   Float
+  clientId      Int?
+  client        Client?  @relation(fields: [clientId], references: [id])
   paymentMethod String? // "Efectivo", "Transferencia", "Tarjeta"
   isPaid       Boolean      @default(false)
   details      SaleDetail[]
