@@ -161,28 +161,68 @@ export class SaleService {
         },
       });
 
-      // 2. Recalcular abonos acumulados
+      // 2. Recalcular abonos acumulados sobre la venta
       const payments = await tx.salePayment.findMany({
         where: { saleId },
         select: { amount: true },
       });
       const totalPaid = payments.reduce((acc, p) => acc + p.amount, 0);
 
-      // 3. Marcar como pagada si ya cubre el total
-      const sale = await tx.sale.findUnique({ where: { id: saleId } });
-      if (sale && !sale.isPaid && totalPaid >= sale.totalAmount) {
-        await tx.sale.update({
-          where: { id: saleId },
-          data: {
-            paidAmount: totalPaid,
-            isPaid: true,
-          },
+      // 1) Busca la venta
+      const saleRecord = await tx.sale.findUnique({
+        where: { id: saleId },
+      });
+
+      // 2) Asegúrate de que exista
+      if (!saleRecord) {
+        throw new Error(`Venta con id ${saleId} no encontrada`);
+      }
+
+      // 3) Ahora usa saleRecord.totalAmount con seguridad
+      const isPaidFlag = totalPaid >= saleRecord.totalAmount;
+
+      await tx.sale.update({
+        where: { id: saleId },
+        data: {
+          paidAmount: totalPaid,
+          isPaid: isPaidFlag,
+        },
+      });
+
+      // 4. **Registrar el ingreso en CashClosing** del día del abono
+      const abonoDate = dto.date ? new Date(dto.date) : new Date();
+      const dayStart = new Date(abonoDate);
+      dayStart.setHours(0, 0, 0, 0);
+
+      // Intenta actualizar un CashClosing ya existente
+      const existingClosing = await tx.cashClosing.findUnique({
+        where: { date: dayStart },
+      });
+
+      if (existingClosing) {
+        // Suma al totalIncome
+        await tx.cashClosing.update({
+          where: { date: dayStart },
+          data: { totalIncome: { increment: payment.amount } },
         });
       } else {
-        await tx.sale.update({
-          where: { id: saleId },
+        // Si no existía, créalo con este abono como ingreso extra
+        await tx.cashClosing.create({
           data: {
-            paidAmount: totalPaid,
+            date: dayStart,
+            openingCash: 0,
+            closingCash: 0,
+            systemCash: 0,
+            difference: 0,
+            totalSales: 0,
+            cashSales: 0,
+            cardSales: 0,
+            transferSales: 0,
+            creditSales: 0,
+            totalIncome: payment.amount,
+            totalExpense: 0,
+            totalPayments: 0,
+            notes: 'Apertura automática por abono',
           },
         });
       }
@@ -208,16 +248,33 @@ export class SaleService {
 
   async getPendingSales() {
     const sales = await this.prisma.sale.findMany({
-      include: { payments: true },
       where: { isPaid: false },
+      include: {
+        payments: true,
+        client: true, // ← incluimos relación cliente
+      },
       orderBy: { date: 'desc' },
     });
+
     return sales.map((sale) => {
-      let totalPaid =
-        (sale.paidAmount || 0) +
-        sale.payments.reduce((acc, p) => acc + p.amount, 0);
+      // 1) calcula total de abonos
+      let totalPaid = sale.payments.reduce((acc, p) => acc + p.amount, 0);
+      // 2) pendiente
       const pending = sale.totalAmount - totalPaid;
-      return { ...sale, totalPaid, pending };
+      // 3) decide si ya está pagada
+      const isPaid = totalPaid >= sale.totalAmount;
+
+      // 4) nombre a mostrar: cliente registrado o texto libre
+      const displayName = sale.client?.name ?? sale.customerName;
+
+      return {
+        ...sale,
+        totalPaid,
+        pending,
+        isPaid,
+        customerName: displayName, // actualizamos el campo
+        // opcionalmente podrías omitir client si no lo usas en frontend
+      };
     });
   }
 }
