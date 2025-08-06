@@ -1,7 +1,11 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateSaleDto } from './dto/create-sale.dto';
 import { CreateSalePaymentDto } from './dto/create-sale-payment.dto';
+import { CreateCreditNoteDto } from './dto/create-credit-note.dto';
+const PDFDocument = require('pdfkit');
+const fs = require('fs');
+const path = require('path');
 
 @Injectable()
 export class SaleService {
@@ -275,6 +279,191 @@ export class SaleService {
         customerName: displayName, // actualizamos el campo
         // opcionalmente podrías omitir client si no lo usas en frontend
       };
+    });
+  }
+
+  async createCreditNote(saleId: number, dto: CreateCreditNoteDto) {
+    const sale = await this.prisma.sale.findUnique({
+      where: { id: saleId },
+      include: { details: true }, // ← aquí añadimos el include
+    });
+
+    if (!sale) throw new NotFoundException('Venta no encontrada');
+
+    // Calcula subtotal de la nota
+    const details = dto.details.map((d) => {
+      const prod = {
+        unitPrice:
+          sale.details.find((sd) => sd.productId === d.productId)?.unitPrice ||
+          0,
+      };
+      const qty = d.quantity;
+      return {
+        ...d,
+        unitPrice: prod.unitPrice,
+        totalPrice: qty * prod.unitPrice,
+      };
+    });
+    const totalNote = details.reduce((sum, d) => sum + d.totalPrice, 0);
+
+    return this.prisma.$transaction(async (tx) => {
+      // 1) Crear la nota de crédito
+      const note = await tx.creditNote.create({
+        data: {
+          saleId,
+          date: dto.date ? new Date(dto.date) : undefined,
+          totalAmount: totalNote,
+          details: {
+            create: details.map((d) => ({
+              productId: d.productId,
+              quantity: d.quantity,
+              unitPrice: d.unitPrice,
+              totalPrice: d.totalPrice,
+            })),
+          },
+        },
+        include: { details: true },
+      });
+
+      // 2) Ajustar stock: sumar la cantidad devuelta
+      await Promise.all(
+        details.map((d) =>
+          tx.product.update({
+            where: { id: d.productId },
+            data: { stock: { increment: d.quantity } },
+          }),
+        ),
+      );
+
+      // 3) Reducir totalAmount y recalcular pendiente en la venta
+      const newTotal = sale.totalAmount - totalNote;
+      await tx.sale.update({
+        where: { id: saleId },
+        data: {
+          totalAmount: newTotal,
+        },
+      });
+
+      return note;
+    });
+  }
+
+  async generatePendingPdf(saleId: number, dueDays: number): Promise<Buffer> {
+    const sale = await this.prisma.sale.findUnique({
+      where: { id: saleId },
+      include: { details: { include: { product: true } }, client: true },
+    });
+    if (!sale) throw new NotFoundException();
+
+    return new Promise<Buffer>((resolve, reject) => {
+      const doc = new PDFDocument({ size: 'A4', margin: 50 });
+      const buffers: Buffer[] = [];
+      doc.on('data', (b: Buffer) => buffers.push(b));
+      doc.on('end', () => resolve(Buffer.concat(buffers)));
+      doc.on('error', (err) => reject(err));
+
+      // --- 1) Encabezado con logo y datos ---
+      const logoPath = path.join(process.cwd(), 'public', 'logo.png');
+      if (fs.existsSync(logoPath)) {
+        doc.image(logoPath, 50, 45, { width: 80 });
+      }
+      doc.fontSize(20).text('Perfumería Milan', 150, 50, { bold: true });
+      doc
+        .fontSize(10)
+        .text('Dirección: Carrera 9 # 14 -03', 150, 75)
+        .text('Teléfono: +57 3123050704', 150, 90)
+        .text('Email: milancol@gmail.com', 150, 105);
+
+      // Línea divisoria
+      doc.moveTo(50, 130).lineTo(545, 130).stroke();
+
+      // --- 2) Info cliente y fechas ---
+      const clienteY = 140;
+      doc
+        .fontSize(12)
+        .text(
+          `Cliente: ${sale.client?.name ?? sale.customerName}`,
+          50,
+          clienteY,
+        )
+        .text(`Documento: ${sale.client?.document ?? '-'}`, 50, clienteY + 15)
+        .text(
+          `Fecha venta: ${sale.date.toISOString().slice(0, 10)}`,
+          300,
+          clienteY,
+        )
+        .text(
+          `Vence: ${new Date(Date.now() + dueDays * 86400000)
+            .toISOString()
+            .slice(0, 10)}`,
+          300,
+          clienteY + 15,
+        );
+
+      // --- 3) Tabla de productos ---
+      const tableTop = clienteY + 50;
+      const itemX = {
+        name: 50,
+        qty: 300,
+        unitPrice: 350,
+        total: 450,
+      };
+
+      doc
+        .fontSize(10)
+        .text('Producto', itemX.name, tableTop, { bold: true })
+        .text('Cant.', itemX.qty, tableTop)
+        .text('P. Unit.', itemX.unitPrice, tableTop)
+        .text('Total', itemX.total, tableTop);
+
+      doc
+        .moveTo(50, tableTop + 15)
+        .lineTo(545, tableTop + 15)
+        .stroke();
+
+      sale.details.forEach((d, i) => {
+        const y = tableTop + 25 + i * 20;
+        doc
+          .text(d.product.name, itemX.name, y, { width: 240 })
+          .text(d.quantity.toString(), itemX.qty, y)
+          .text(`$${d.unitPrice.toLocaleString()}`, itemX.unitPrice, y)
+          .text(
+            `$${(d.quantity * d.unitPrice).toLocaleString()}`,
+            itemX.total,
+            y,
+          );
+      });
+
+      // --- 4) Totales al final ---
+      const summaryY = tableTop + 40 + sale.details.length * 20;
+      const totalAmount = sale.details.reduce(
+        (s, d) => s + d.quantity * d.unitPrice,
+        0,
+      );
+      const paid = sale.paidAmount;
+      const pending = totalAmount - paid;
+
+      doc
+        .fontSize(12)
+        .text(`Total venta: $${totalAmount.toLocaleString()}`, 50, summaryY)
+        .text(`Pagado: $${paid.toLocaleString()}`, 50, summaryY + 15)
+        .text(
+          `Saldo pendiente: $${pending.toLocaleString()}`,
+          50,
+          summaryY + 30,
+          { bold: true },
+        );
+
+      // --- 5) Pie de página ---
+      doc
+        .fontSize(8)
+        .text('Gracias por su preferencia •', 50, 780, {
+          align: 'center',
+          width: 495,
+        });
+
+      // Finaliza el documento
+      doc.end();
     });
   }
 }

@@ -1,11 +1,19 @@
-import { Controller, Get, Post, Body, Param, Query } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Query, Res } from '@nestjs/common';
 import { SaleService } from './sale.service';
 import { CreateSaleDto } from './dto/create-sale.dto';
 import { CreateSalePaymentDto } from './dto/create-sale-payment.dto';
+import { CreateCreditNoteDto } from './dto/create-credit-note.dto';
+import type { Response } from 'express';
 
 @Controller('sales')
 export class SaleController {
   constructor(private readonly saleService: SaleService) {}
+
+  // POST /sales/:id/returns
+  @Post(':id/returns')
+  createCreditNote(@Param('id') id: string, @Body() dto: CreateCreditNoteDto) {
+    return this.saleService.createCreditNote(+id, dto);
+  }
 
   @Get('pending')
   async getPendingSales() {
@@ -39,5 +47,19 @@ export class SaleController {
   @Get(':id/payments')
   async getPayments(@Param('id') id: string) {
     return this.saleService.getPayments(Number(id));
+  }
+
+  @Get(':id/pdf')
+  async pdf(
+    @Param('id') id: string,
+    @Query('due') dueDays: string,
+    @Res() res: Response,
+  ) {
+    const buffer = await this.saleService.generatePendingPdf(
+      +id,
+      +dueDays || 30,
+    );
+    res.set({ 'Content-Type': 'application/pdf' });
+    res.send(buffer);
   }
 }

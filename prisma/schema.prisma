@@ -8,14 +8,14 @@ datasource db {
 }
 
 model User {
-  id        Int        @id @default(autoincrement())
-  username  String     @unique
-  password  String
-  name      String
-  isActive  Boolean    @default(true)
-  roles     UserRole[]
-  createdAt DateTime   @default(now())
-  updatedAt DateTime   @updatedAt
+  id           Int           @id @default(autoincrement())
+  username     String        @unique
+  password     String
+  name         String
+  isActive     Boolean       @default(true)
+  roles        UserRole[]
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
   cashClosings CashClosing[] @relation("UserCashClosings")
 }
 
@@ -38,34 +38,35 @@ model UserRole {
 model Category {
   id       Int       @id @default(autoincrement())
   name     String    @unique
-  products Product[] // relación inversa
+  products Product[]
 }
 
 model Unit {
   id       Int       @id @default(autoincrement())
-  name     String    @unique // Ejemplo: "Gramos", "Onzas", "Frascos"
-  symbol   String? // Ejemplo: "g", "oz", "ml"
+  name     String    @unique
+  symbol   String?
   products Product[]
 }
 
 model Product {
-  id              Int               @id @default(autoincrement())
-  name            String
-  description     String?
-  categoryId      Int
-  category        Category          @relation(fields: [categoryId], references: [id])
-  unitId          Int
-  unit            Unit              @relation(fields: [unitId], references: [id])
-  stock           Float // Por si usas gramos, permite decimales
-  minStock        Float? // Stock mínimo para alertas
-  purchasePrice   Float // Precio de compra
-  salePrice       Float // Precio de venta
-  imageUrl        String? // Imagen del producto
-  createdAt       DateTime          @default(now())
-  updatedAt       DateTime          @updatedAt
-  ProductMovement ProductMovement[]
-  PurchaseDetail  PurchaseDetail[]
-  SaleDetail      SaleDetail[]
+  id                  Int                  @id @default(autoincrement())
+  name                String
+  description         String?
+  categoryId          Int
+  category            Category             @relation(fields: [categoryId], references: [id])
+  unitId              Int
+  unit                Unit                 @relation(fields: [unitId], references: [id])
+  stock               Float
+  minStock            Float?
+  purchasePrice       Float
+  salePrice           Float
+  imageUrl            String?
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  ProductMovement     ProductMovement[]
+  PurchaseDetail      PurchaseDetail[]
+  SaleDetail          SaleDetail[]
+  creditNoteDetails   CreditNoteDetail[]   // relación inversa, sin @relation explícito
 }
 
 model Supplier {
@@ -107,32 +108,33 @@ model PurchaseDetail {
 }
 
 model Client {
-  id            Int      @id @default(autoincrement())
-  name          String
-  phone         String?  // Opcional
-  email         String?  // Opcional
-  document      String?  // Opcional (CC, Nit, etc.)
-  address       String?  // Opcional
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id        Int      @id @default(autoincrement())
+  name      String
+  phone     String?
+  email     String?
+  document  String?
+  address   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  sales         Sale[]   // relación con ventas
+  sales     Sale[]
 }
 
 model Sale {
-  id           Int          @id @default(autoincrement())
-  date         DateTime     @default(now())
-  customerName String?
-  totalAmount  Float
-  paidAmount   Float
+  id            Int               @id @default(autoincrement())
+  date          DateTime          @default(now())
+  customerName  String?
+  totalAmount   Float
+  paidAmount    Float
   clientId      Int?
-  client        Client?  @relation(fields: [clientId], references: [id])
-  paymentMethod String? // "Efectivo", "Transferencia", "Tarjeta"
-  isPaid       Boolean      @default(false)
-  details      SaleDetail[]
-  createdAt    DateTime     @default(now())
-  updatedAt    DateTime     @updatedAt
-  payments    SalePayment[] // relación inversa
+  client        Client?           @relation(fields: [clientId], references: [id])
+  paymentMethod String?
+  isPaid        Boolean           @default(false)
+  details       SaleDetail[]
+  payments      SalePayment[]
+  creditNote    CreditNote?       // inversa sin @relation
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
 }
 
 model SaleDetail {
@@ -152,40 +154,39 @@ model ProductMovement {
   id        Int          @id @default(autoincrement())
   productId Int
   product   Product      @relation(fields: [productId], references: [id])
-  type      MovementType // "IN", "OUT", "ADJUST"
+  type      MovementType
   quantity  Float
-  price     Float? // Precio unitario de compra o venta (si aplica)
-  note      String? // Ejemplo: "Compra a Proveedor X", "Venta factura 123"
+  price     Float?
+  note      String?
   createdAt DateTime     @default(now())
 }
 
 enum MovementType {
-  IN // Entrada (compra)
-  OUT // Salida (venta)
-  ADJUST // Ajuste manual
+  IN
+  OUT
+  ADJUST
 }
 
 model CashClosing {
   id            Int      @id @default(autoincrement())
-  date          DateTime @unique // Un cierre por día
-  openingCash   Float    // Saldo inicial (si se lleva control)
-  closingCash   Float    // Saldo final contado por el cajero
-  systemCash    Float    // Saldo calculado por el sistema (ventas - gastos + apertura)
-  difference    Float    // Diferencia (closingCash - systemCash)
-  totalSales    Float    // Ventas del día (suma total)
-  cashSales     Float    // Ventas en efectivo
-  cardSales     Float    // Ventas por tarjeta
-  transferSales Float    // Ventas por transferencia
-  creditSales   Float    // Ventas a crédito
-  totalIncome   Float    // Ingresos extra
-  totalExpense  Float    // Gastos del día (egresos)
-  totalPayments Float    // Pagos a proveedores o abonos
-  notes         String?  // Observaciones del cierre
+  date          DateTime @unique
+  openingCash   Float
+  closingCash   Float
+  systemCash    Float
+  difference    Float
+  totalSales    Float
+  cashSales     Float
+  cardSales     Float
+  transferSales Float
+  creditSales   Float
+  totalIncome   Float
+  totalExpense  Float
+  totalPayments Float
+  notes         String?
   createdAt     DateTime @default(now())
-  createdById   Int?     // Usuario que hizo el cierre (opcional)
+  createdById   Int?
   createdBy     User?    @relation("UserCashClosings", fields: [createdById], references: [id])
 }
-
 
 model Expense {
   id          Int      @id @default(autoincrement())
@@ -195,17 +196,36 @@ model Expense {
   category    String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
-  // Puedes agregar más campos según tu necesidad
 }
-
 
 model SalePayment {
   id        Int      @id @default(autoincrement())
   saleId    Int
   sale      Sale     @relation(fields: [saleId], references: [id])
-  amount    Float    // Monto del abono
+  amount    Float
   date      DateTime @default(now())
-  method    String?  // "Efectivo", "Transferencia", etc. (opcional)
-  note      String?  // Observaciones (opcional)
+  method    String?
+  note      String?
   createdAt DateTime @default(now())
+}
+
+model CreditNote {
+  id          Int                @id @default(autoincrement())
+  saleId      Int                @unique
+  sale        Sale               @relation(fields: [saleId], references: [id])
+  date        DateTime           @default(now())
+  totalAmount Float
+  details     CreditNoteDetail[]
+  createdAt   DateTime           @default(now())
+}
+
+model CreditNoteDetail {
+  id           Int         @id @default(autoincrement())
+  creditNoteId Int
+  creditNote   CreditNote  @relation(fields: [creditNoteId], references: [id])
+  productId    Int
+  product      Product     @relation(fields: [productId], references: [id])
+  quantity     Float
+  unitPrice    Float
+  totalPrice   Float
 }
