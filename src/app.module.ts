@@ -16,6 +16,8 @@ import { CashClosingModule } from './cash-closing/cash-closing.module';
 import { ExpenseModule } from './expense/expense.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { ClientsModule } from './clients/clients.module';
+import { ScheduleModule } from '@nestjs/schedule';
+import { RecurringExpenseModule } from './recurring-expense/recurring-expense.module';
 
 @Module({
   imports: [
@@ -33,7 +35,9 @@ import { ClientsModule } from './clients/clients.module';
     CashClosingModule,
     ExpenseModule,
     DashboardModule,
-    ClientsModule
+    ClientsModule,
+    ScheduleModule.forRoot(),
+    RecurringExpenseModule
   ],
   controllers: [AppController],
   providers: [AppService],

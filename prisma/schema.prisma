@@ -49,24 +49,24 @@ model Unit {
 }
 
 model Product {
-  id                  Int                  @id @default(autoincrement())
-  name                String
-  description         String?
-  categoryId          Int
-  category            Category             @relation(fields: [categoryId], references: [id])
-  unitId              Int
-  unit                Unit                 @relation(fields: [unitId], references: [id])
-  stock               Float
-  minStock            Float?
-  purchasePrice       Float
-  salePrice           Float
-  imageUrl            String?
-  createdAt           DateTime             @default(now())
-  updatedAt           DateTime             @updatedAt
-  ProductMovement     ProductMovement[]
-  PurchaseDetail      PurchaseDetail[]
-  SaleDetail          SaleDetail[]
-  creditNoteDetails   CreditNoteDetail[]   // relación inversa, sin @relation explícito
+  id                Int                @id @default(autoincrement())
+  name              String
+  description       String?
+  categoryId        Int
+  category          Category           @relation(fields: [categoryId], references: [id])
+  unitId            Int
+  unit              Unit               @relation(fields: [unitId], references: [id])
+  stock             Float
+  minStock          Float?
+  purchasePrice     Float
+  salePrice         Float
+  imageUrl          String?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  ProductMovement   ProductMovement[]
+  PurchaseDetail    PurchaseDetail[]
+  SaleDetail        SaleDetail[]
+  creditNoteDetails CreditNoteDetail[] // relación inversa, sin @relation explícito
 }
 
 model Supplier {
@@ -117,24 +117,24 @@ model Client {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  sales     Sale[]
+  sales Sale[]
 }
 
 model Sale {
-  id            Int               @id @default(autoincrement())
-  date          DateTime          @default(now())
+  id            Int           @id @default(autoincrement())
+  date          DateTime      @default(now())
   customerName  String?
   totalAmount   Float
   paidAmount    Float
   clientId      Int?
-  client        Client?           @relation(fields: [clientId], references: [id])
+  client        Client?       @relation(fields: [clientId], references: [id])
   paymentMethod String?
-  isPaid        Boolean           @default(false)
+  isPaid        Boolean       @default(false)
   details       SaleDetail[]
   payments      SalePayment[]
-  creditNote    CreditNote?       // inversa sin @relation
-  createdAt     DateTime          @default(now())
-  updatedAt     DateTime          @updatedAt
+  creditNote    CreditNote? // inversa sin @relation
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
 }
 
 model SaleDetail {
@@ -188,14 +188,26 @@ model CashClosing {
   createdBy     User?    @relation("UserCashClosings", fields: [createdById], references: [id])
 }
 
+enum ExpenseCategory {
+  SERVICIOS
+  SUMINISTROS
+  ALQUILER
+  OTRO
+}
+
 model Expense {
-  id          Int      @id @default(autoincrement())
-  date        DateTime @default(now())
-  amount      Float
-  description String
-  category    String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id                 Int               @id @default(autoincrement())
+  date               DateTime          @default(now())
+  amount             Float
+  description        String
+  category           ExpenseCategory
+  paymentMethod      String?
+  notes              String?
+  recurringExpenseId Int?
+  recurringExpense   RecurringExpense? @relation("RecurringExpenses", fields: [recurringExpenseId], references: [id])
+  deletedAt          DateTime?
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
 }
 
 model SalePayment {
@@ -220,12 +232,24 @@ model CreditNote {
 }
 
 model CreditNoteDetail {
-  id           Int         @id @default(autoincrement())
+  id           Int        @id @default(autoincrement())
   creditNoteId Int
-  creditNote   CreditNote  @relation(fields: [creditNoteId], references: [id])
+  creditNote   CreditNote @relation(fields: [creditNoteId], references: [id])
   productId    Int
-  product      Product     @relation(fields: [productId], references: [id])
+  product      Product    @relation(fields: [productId], references: [id])
   quantity     Float
   unitPrice    Float
   totalPrice   Float
+}
+
+model RecurringExpense {
+  id            Int             @id @default(autoincrement())
+  concept       String // e.g. "Arriendo oficina"
+  amount        Float // e.g. 1875000
+  category      ExpenseCategory
+  paymentMethod String // e.g. "Transferencia", "Efectivo"
+  notes         String? // opcional
+  daysOfMonth   Int[] // lista de días del mes: [1], o [1,15]
+  createdAt     DateTime        @default(now())
+  expenses      Expense[]       @relation("RecurringExpenses")
 }

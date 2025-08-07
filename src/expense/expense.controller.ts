@@ -1,33 +1,51 @@
-import { Controller, Get, Post, Patch, Delete, Param, Body } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Param, Body, Query, ParseBoolPipe } from '@nestjs/common';
 import { ExpenseService } from './expense.service';
 import { CreateExpenseDto, UpdateExpenseDto } from './dto/create-expense.dto';
 
 @Controller('expenses')
 export class ExpenseController {
-  constructor(private readonly expenseService: ExpenseService) {}
+  constructor(private readonly svc: ExpenseService) {}
 
   @Post()
   create(@Body() dto: CreateExpenseDto) {
-    return this.expenseService.create(dto);
+    return this.svc.create(dto);
   }
 
   @Get()
-  findAll() {
-    return this.expenseService.findAll();
+  findAll(
+    @Query('dateFrom') dateFrom?: string,
+    @Query('dateTo') dateTo?: string,
+    @Query('category') category?: string,
+    @Query('isRecurring', ParseBoolPipe) isRecurring?: boolean,
+    @Query('page') page = '1',
+    @Query('pageSize') pageSize = '20',
+  ) {
+    return this.svc.findAll({
+      dateFrom, dateTo, category, isRecurring,
+      page: Number(page), pageSize: Number(pageSize),
+    });
+  }
+
+  @Get('summary')
+  getSummary(
+    @Query('dateFrom') dateFrom?: string,
+    @Query('dateTo') dateTo?: string,
+  ) {
+    return this.svc.getSummary({ dateFrom, dateTo });
   }
 
   @Get(':id')
   findOne(@Param('id') id: string) {
-    return this.expenseService.findOne(Number(id));
+    return this.svc.findOne(+id);
   }
 
   @Patch(':id')
   update(@Param('id') id: string, @Body() dto: UpdateExpenseDto) {
-    return this.expenseService.update(Number(id), dto);
+    return this.svc.update(+id, dto);
   }
 
   @Delete(':id')
   remove(@Param('id') id: string) {
-    return this.expenseService.remove(Number(id));
+    return this.svc.remove(+id);
   }
 }
