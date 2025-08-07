@@ -21,6 +21,8 @@ import { RecurringExpenseModule } from './recurring-expense/recurring-expense.mo
 import { ConfigModule } from './config/config.module';
 import { SecurityModule } from './security/security.module';
 import { ReportsModule } from './reports/reports.module';
+import { NotificationsModule } from './notifications/notifications.module';
+import { InventoryAutomationModule } from './inventory-automation/inventory-automation.module';
 
 @Module({
   imports: [
@@ -43,7 +45,9 @@ import { ReportsModule } from './reports/reports.module';
     ClientsModule,
     ScheduleModule.forRoot(),
     RecurringExpenseModule,
-    ReportsModule
+    ReportsModule,
+    NotificationsModule,
+    InventoryAutomationModule,
   ],
   controllers: [AppController],
   providers: [AppService],
