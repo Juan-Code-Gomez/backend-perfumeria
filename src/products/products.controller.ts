@@ -15,13 +15,13 @@ import {
 import * as multer from 'multer';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ProductsService } from './products.service';
-// import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-// import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { QueryProductDto } from './dto/query-product.dto';
 import { CreateProductMovementDto } from './dto/create-product-movement.dto';
+import { CreateProductDto, UpdateProductDto } from './dto/product.dto';
 import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
 import { RolesGuard } from 'src/auth/guards/roles.guard';
+import { MESSAGES } from '../common/constants';
 
 @Controller('products')
 @UseGuards(JwtAuthGuard, RolesGuard)

@@ -4,14 +4,18 @@ import { AuthController } from './auth.controller';
 import { JwtModule } from '@nestjs/jwt';
 import { UserService } from '../user/user.service';
 import { JwtStrategy } from './strategy/jwt.strategy';
-import { PrismaModule } from '../prisma/prisma.module'; // Asegúrate de importar el módulo Prisma si lo necesitas
+import { PrismaModule } from '../prisma/prisma.module';
+import { ConfigService } from '../config/config.service';
 
 @Module({
   imports: [
-  PrismaModule, // Importa el módulo Prisma si lo necesitas
-    JwtModule.register({
-      secret: 'supersecretkey', // mejor ponerlo en .env
-      signOptions: { expiresIn: '1d' },
+    PrismaModule,
+    JwtModule.registerAsync({
+      useFactory: (configService: ConfigService) => ({
+        secret: configService.jwtSecret,
+        signOptions: { expiresIn: configService.jwtExpiresIn },
+      }),
+      inject: [ConfigService],
     }),
   ],
   controllers: [AuthController],

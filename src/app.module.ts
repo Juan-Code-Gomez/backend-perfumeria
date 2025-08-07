@@ -18,9 +18,14 @@ import { DashboardModule } from './dashboard/dashboard.module';
 import { ClientsModule } from './clients/clients.module';
 import { ScheduleModule } from '@nestjs/schedule';
 import { RecurringExpenseModule } from './recurring-expense/recurring-expense.module';
+import { ConfigModule } from './config/config.module';
+import { SecurityModule } from './security/security.module';
+import { ReportsModule } from './reports/reports.module';
 
 @Module({
   imports: [
+    ConfigModule,
+    SecurityModule,
     AuthModule,
     UserModule,
     ProtectedModule,
@@ -37,7 +42,8 @@ import { RecurringExpenseModule } from './recurring-expense/recurring-expense.mo
     DashboardModule,
     ClientsModule,
     ScheduleModule.forRoot(),
-    RecurringExpenseModule
+    RecurringExpenseModule,
+    ReportsModule
   ],
   controllers: [AppController],
   providers: [AppService],
