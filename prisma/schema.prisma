@@ -52,10 +52,16 @@ model Category {
 }
 
 model Unit {
-  id       Int       @id @default(autoincrement())
-  name     String    @unique
-  symbol   String?
-  products Product[]
+  id          Int       @id @default(autoincrement())
+  name        String    @unique
+  symbol      String?   // Símbolo de la unidad (ml, g, und, etc.)
+  description String?   // Descripción de la unidad
+  unitType    String?   // Tipo: VOLUME, WEIGHT, QUANTITY, etc.
+  isActive    Boolean   @default(true)
+  isDecimal   Boolean   @default(true) // Si permite decimales
+  products    Product[]
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 }
 
 model Product {
@@ -81,15 +87,37 @@ model Product {
 }
 
 model Supplier {
-  id        Int        @id @default(autoincrement())
-  name      String
-  nit       String     @unique
-  phone     String?
-  email     String?
-  address   String?
-  purchases Purchase[]
-  createdAt DateTime   @default(now())
-  updatedAt DateTime   @updatedAt
+  id                Int        @id @default(autoincrement())
+  name              String
+  nit               String     @unique
+  phone             String?
+  email             String?
+  address           String?
+  contactPerson     String?    // Persona de contacto
+  website           String?    // Sitio web del proveedor
+  
+  // Información comercial
+  paymentTerms      String?    // "CONTADO", "30_DIAS", "45_DIAS", "60_DIAS"
+  creditLimit       Float?     // Límite de crédito
+  currentDebt       Float      @default(0) // Deuda actual
+  supplierType      String?    // "ESENCIAS", "FRASCOS", "ORIGINALES", "MIXTO"
+  
+  // Categorías que maneja este proveedor
+  specializedCategories String[] // Array de IDs o nombres de categorías
+  
+  // Estado y configuración
+  isActive          Boolean    @default(true)
+  isPreferred       Boolean   @default(false) // Proveedor preferido
+  minOrderAmount    Float?     // Monto mínimo de pedido
+  leadTimeDays      Int?       // Días de entrega
+  
+  // Calificación y notas
+  rating            Float?     // Calificación de 1 a 5
+  notes             String?    // Notas adicionales
+  
+  purchases         Purchase[]
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
 }
 
 model Purchase {
