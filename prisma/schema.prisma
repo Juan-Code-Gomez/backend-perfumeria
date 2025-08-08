@@ -68,22 +68,77 @@ model Product {
   id                Int                @id @default(autoincrement())
   name              String
   description       String?
+  
+  // Identificación y códigos
+  sku               String?            @unique
+  barcode           String?
+  fragranceName     String?            // Nombre de la fragancia (para agrupar esencias y perfumes 1.1)
+  
+  // Categorización y relaciones básicas
   categoryId        Int
   category          Category           @relation(fields: [categoryId], references: [id])
   unitId            Int
   unit              Unit               @relation(fields: [unitId], references: [id])
+  
+  // Información del producto
+  productType       String             @default("SIMPLE") // SIMPLE, VARIANT, COMPOSITE
+  size              String?            // "1 oz", "2 oz", "100ml", etc.
+  sizeValue         Float?             // Valor numérico del tamaño
+  brand             String?            // Marca del producto
+  gender            String?            // MASCULINO, FEMENINO, UNISEX
+  
+  // Variantes y productos padre/hijo
+  hasVariants       Boolean            @default(false)
+  parentProductId   Int?               // Para variantes (esencia vs perfume 1.1)
+  parentProduct     Product?           @relation("ProductVariants", fields: [parentProductId], references: [id])
+  variants          Product[]          @relation("ProductVariants")
+  variantType       String?            // ESENCIA, PERFUME_11, SPLASH, etc.
+  
+  // Productos compuestos (esencia + frasco + accesorios)
+  isComposite       Boolean            @default(false)
+  requiresPreparation Boolean          @default(false) // Para esencias que se preparan
+  components        ProductComponent[] @relation("ProductComponents")
+  usedInProducts    ProductComponent[] @relation("ComponentProducts")
+  
+  // Inventario
   stock             Float
   minStock          Float?
+  
+  // Precios
   purchasePrice     Float
-  salePrice         Float
+  salePrice         Float              // Precio base
+  suggestedPrice    Float?             // Precio sugerido
+  minPrice          Float?             // Precio mínimo
+  maxPrice          Float?             // Precio máximo
+  priceHistory      ProductPrice[]
+  
+  // Proveedor
+  supplierId        Int?
+  supplier          Supplier?          @relation(fields: [supplierId], references: [id])
+  supplierCode      String?            // Código del producto en el proveedor
+  
+  // Metadatos
   imageUrl          String?
+  notes             String?
+  tags              String[]           // Tags para búsqueda
   isActive          Boolean            @default(true)
   createdAt         DateTime           @default(now())
   updatedAt         DateTime           @updatedAt
+  
+  // Relaciones existentes
   ProductMovement   ProductMovement[]
   PurchaseDetail    PurchaseDetail[]
   SaleDetail        SaleDetail[]
-  creditNoteDetails CreditNoteDetail[] // relación inversa, sin @relation explícito
+  creditNoteDetails CreditNoteDetail[]
+
+  @@index([sku])
+  @@index([barcode])
+  @@index([fragranceName])
+  @@index([productType])
+  @@index([parentProductId])
+  @@index([supplierId])
+  @@index([brand])
+  @@index([tags])
 }
 
 model Supplier {
@@ -116,8 +171,49 @@ model Supplier {
   notes             String?    // Notas adicionales
   
   purchases         Purchase[]
+  products          Product[]  // Productos de este proveedor
+  productPrices     ProductPrice[] // Historial de precios
   createdAt         DateTime   @default(now())
   updatedAt         DateTime   @updatedAt
+}
+
+// Modelo para componentes de productos compuestos
+model ProductComponent {
+  id                  Int      @id @default(autoincrement())
+  productId           Int      // Producto principal (compuesto)
+  product             Product  @relation("ProductComponents", fields: [productId], references: [id], onDelete: Cascade)
+  componentProductId  Int      // Producto componente
+  componentProduct    Product  @relation("ComponentProducts", fields: [componentProductId], references: [id], onDelete: Cascade)
+  quantity            Float    @default(1) // Cantidad del componente necesaria
+  isOptional          Boolean  @default(false) // Si es opcional
+  notes               String?  // Notas específicas del componente
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@unique([productId, componentProductId])
+  @@index([productId])
+  @@index([componentProductId])
+}
+
+// Modelo para historial de precios
+model ProductPrice {
+  id              Int       @id @default(autoincrement())
+  productId       Int
+  product         Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+  purchasePrice   Float?    // Precio de compra
+  salePrice       Float?    // Precio de venta
+  suggestedPrice  Float?    // Precio sugerido
+  supplierId      Int?      // Proveedor asociado a este precio
+  supplier        Supplier? @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  effectiveDate   DateTime  @default(now()) // Fecha efectiva del precio
+  isActive        Boolean   @default(true) // Si está activo
+  notes           String?   // Notas sobre el cambio de precio
+  createdAt       DateTime  @default(now())
+
+  @@index([productId])
+  @@index([supplierId])
+  @@index([effectiveDate])
+  @@index([isActive])
 }
 
 model Purchase {
@@ -195,8 +291,8 @@ model ProductMovement {
   product   Product      @relation(fields: [productId], references: [id])
   type      MovementType
   quantity  Float
-  price     Float?
-  note      String?
+  reason    String?      // Razón del movimiento
+  notes     String?      // Notas adicionales
   createdAt DateTime     @default(now())
 }
 

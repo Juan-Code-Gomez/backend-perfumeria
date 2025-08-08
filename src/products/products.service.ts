@@ -3,6 +3,7 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateProductMovementDto } from './dto/create-product-movement.dto';
+import { CreateProductDto, UpdateProductDto } from './dto/enhanced-product.dto';
 import * as XLSX from 'xlsx';
 
 @Injectable()
@@ -52,8 +53,8 @@ export class ProductsService {
           productId,
           type: data.type,
           quantity: data.quantity,
-          price: data.price,
-          note: data.note,
+          reason: data.reason,
+          notes: data.notes,
         },
       }),
     ]);

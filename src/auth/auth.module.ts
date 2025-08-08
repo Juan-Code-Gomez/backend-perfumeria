@@ -6,11 +6,14 @@ import { UserService } from '../user/user.service';
 import { JwtStrategy } from './strategy/jwt.strategy';
 import { PrismaModule } from '../prisma/prisma.module';
 import { ConfigService } from '../config/config.service';
+import { ConfigModule } from '../config/config.module';
 
 @Module({
   imports: [
     PrismaModule,
+    ConfigModule,
     JwtModule.registerAsync({
+      imports: [ConfigModule],
       useFactory: (configService: ConfigService) => ({
         secret: configService.jwtSecret,
         signOptions: { expiresIn: configService.jwtExpiresIn },
@@ -19,6 +22,7 @@ import { ConfigService } from '../config/config.service';
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy, UserService],
+  providers: [AuthService, JwtStrategy, UserService, ConfigService],
+  exports: [AuthService, JwtStrategy],
 })
 export class AuthModule {}
