@@ -67,7 +67,10 @@ export class CategoryService {
       ],
     });
 
-    return categories;
+    return {
+      success: true,
+      data: categories,
+    };
   }
 
   async findOne(id: number) {
@@ -209,7 +212,7 @@ export class CategoryService {
       }),
     ]);
 
-    const topCategories = await this.prisma.category.findMany({
+    const mostUsedCategories = await this.prisma.category.findMany({
       include: {
         _count: {
           select: {
@@ -225,17 +228,27 @@ export class CategoryService {
       take: 5,
     });
 
+    const recentCategories = await this.prisma.category.findMany({
+      orderBy: {
+        createdAt: 'desc',
+      },
+      take: 5,
+    });
+
     return {
-      totalCategories,
-      activeCategories,
-      inactiveCategories: totalCategories - activeCategories,
-      categoriesWithProducts,
-      categoriesWithoutProducts: totalCategories - categoriesWithProducts,
-      topCategories: topCategories.map(cat => ({
-        id: cat.id,
-        name: cat.name,
-        productCount: cat._count.products,
-      })),
+      success: true,
+      data: {
+        totalCategories,
+        activeCategories,
+        inactiveCategories: totalCategories - activeCategories,
+        categoriesWithProducts,
+        mostUsedCategories: mostUsedCategories.map(cat => ({
+          id: cat.id,
+          name: cat.name,
+          productCount: cat._count.products,
+        })),
+        recentCategories,
+      },
     };
   }
 }

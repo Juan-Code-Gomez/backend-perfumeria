@@ -244,25 +244,6 @@ export class CreateProductDto {
   @Transform(({ value }) => value === 'true' || value === true)
   isActive?: boolean = true;
 }
-  @Min(0)
-  @IsOptional()
-  @Type(() => Number)
-  minStock?: number;
-
-  @IsNumber()
-  @IsPositive()
-  @Type(() => Number)
-  purchasePrice: number;
-
-  @IsNumber()
-  @IsPositive()
-  @Type(() => Number)
-  salePrice: number;
-
-  @IsUrl()
-  @IsOptional()
-  imageUrl?: string;
-}
 
 export class UpdateProductDto {
   @IsString()
