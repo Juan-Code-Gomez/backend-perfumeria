@@ -10,3 +10,6 @@ restartPolicyMaxRetries = 10
 
 [environments.production]
 variables = { NODE_ENV = "production" }
+
+[phases.setup]
+nixPkgs = ["nodejs_20", "npm-10_x", "openssl"]
