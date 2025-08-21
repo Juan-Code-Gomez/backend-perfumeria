@@ -42,11 +42,24 @@ export class ConfigService {
     return process.env.FRONTEND_PROD_URL || '';
   }
 
+  get frontendProdUrls(): string {
+    return process.env.FRONTEND_PROD_URLS || '';
+  }
+
   get allowedOrigins(): string[] {
     const origins = [this.frontendUrl];
+    
+    // Agregar URL única de producción
     if (this.frontendProdUrl) {
       origins.push(this.frontendProdUrl);
     }
+    
+    // Agregar múltiples URLs de producción (separadas por comas)
+    if (this.frontendProdUrls) {
+      const multipleUrls = this.frontendProdUrls.split(',').map(url => url.trim());
+      origins.push(...multipleUrls);
+    }
+    
     return origins;
   }
 
