@@ -19,17 +19,3 @@ export class AppController {
     };
   }
 }
-
-// Controlador adicional sin prefijo para Railway health check
-@Controller('/')
-export class RootHealthController {
-  @Get('health')
-  rootHealthCheck() {
-    return {
-      status: 'ok',
-      timestamp: new Date().toISOString(),
-      service: 'backend-perfumeria',
-      endpoint: 'root-health'
-    };
-  }
-}
