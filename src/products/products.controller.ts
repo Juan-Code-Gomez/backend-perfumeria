@@ -11,7 +11,9 @@ import {
   Query,
   UseInterceptors,
   UploadedFile,
+  Res,
 } from '@nestjs/common';
+import { Response } from 'express';
 import * as multer from 'multer';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ProductsService } from './products.service';
@@ -31,6 +33,11 @@ export class ProductsController {
   @Get('alerts/low-stock')
   findLowStock() {
     return this.productsService.findLowStock();
+  }
+
+  @Get('statistics')
+  getStatistics() {
+    return this.productsService.getStatistics();
   }
 
   @Get(':id/movements')
@@ -98,8 +105,31 @@ export class ProductsController {
       },
     }),
   )
-  async bulkUploadProducts(@UploadedFile() file: Express.Multer.File) {
-    // Aquí llamas tu servicio ya listo
-    return this.productsService.bulkUploadProducts(file);
+  async bulkUploadProducts(
+    @UploadedFile() file: Express.Multer.File,
+    @Body('withSupplier') withSupplier?: string
+  ) {
+    console.log('Controller - withSupplier recibido:', withSupplier);
+    const includeSupplier = withSupplier === 'true';
+    console.log('Controller - includeSupplier procesado:', includeSupplier);
+    return this.productsService.bulkUploadProducts(file, includeSupplier);
+  }
+
+  @Get('export/excel')
+  @Roles('ADMIN')
+  async exportProducts(@Res() res: Response) {
+    const result = await this.productsService.exportProducts();
+    
+    if (!result.success || !result.data) {
+      return res.status(500).json(result);
+    }
+
+    // Configurar headers para descarga de archivo
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${result.data.filename}"`);
+    res.setHeader('Content-Length', result.data.buffer.length);
+
+    // Enviar el buffer del archivo
+    res.send(result.data.buffer);
   }
 }

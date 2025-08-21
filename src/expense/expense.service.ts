@@ -7,6 +7,8 @@ interface FindAllOpts {
   dateFrom?: string;
   dateTo?: string;
   category?: string;
+  paymentMethod?: string;
+  search?: string;
   isRecurring?: boolean;
   page: number;
   pageSize: number;
@@ -22,12 +24,23 @@ export class ExpenseService {
   constructor(private prisma: PrismaService) {}
 
   async create(dto: CreateExpenseDto) {
+    // Crear fecha local sin interpretación UTC
+    let date: Date;
+    if (dto.date) {
+      const dateStr = dto.date.toString();
+      const parts = dateStr.split('-');
+      date = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+    } else {
+      date = new Date();
+    }
+    
     return this.prisma.expense.create({
       data: {
-        date: new Date(dto.date),
+        date: date,
         amount: dto.amount,
         description: dto.description,
         category: dto.category as ExpenseCategory,
+        paymentMethod: dto.paymentMethod,
         notes: dto.notes,
       },
     });
@@ -41,6 +54,11 @@ export class ExpenseService {
     }
 
     if (opts.category) where.category = opts.category;
+    if (opts.paymentMethod) where.paymentMethod = opts.paymentMethod;
+    
+    if (opts.search) {
+      where.description = { contains: opts.search, mode: 'insensitive' };
+    }
 
     // GASTOS FIJOS vs VARIABLES
     if (opts.isRecurring === true) {
@@ -68,21 +86,65 @@ export class ExpenseService {
     if (opts.dateFrom && opts.dateTo) {
       where.date = { gte: new Date(opts.dateFrom), lte: new Date(opts.dateTo) };
     }
-    // total general
+    
+    // Total general
     const total = await this.prisma.expense.aggregate({
       _sum: { amount: true },
       where,
     });
-    // por categoría
+    
+    // Por categoría
     const byCat = await this.prisma.expense.groupBy({
       by: ['category'],
       _sum: { amount: true },
       where,
     });
+    
+    // Por método de pago
+    const byPayment = await this.prisma.expense.groupBy({
+      by: ['paymentMethod'],
+      _sum: { amount: true },
+      where,
+    });
+    
+    // Promedio diario
+    const expenses = await this.prisma.expense.findMany({ where });
+    const dailyAverage = expenses.length > 0 ? (total._sum.amount || 0) / expenses.length : 0;
+    
+    // Mes anterior para comparación
+    let previousMonthTotal = 0;
+    if (opts.dateFrom && opts.dateTo) {
+      const fromDate = new Date(opts.dateFrom);
+      const toDate = new Date(opts.dateTo);
+      const monthsDiff = (toDate.getFullYear() - fromDate.getFullYear()) * 12 + 
+                        (toDate.getMonth() - fromDate.getMonth());
+      
+      if (monthsDiff === 0) { // Si es el mismo mes, comparar con mes anterior
+        const prevMonthStart = new Date(fromDate);
+        prevMonthStart.setMonth(prevMonthStart.getMonth() - 1);
+        const prevMonthEnd = new Date(toDate);
+        prevMonthEnd.setMonth(prevMonthEnd.getMonth() - 1);
+        
+        const prevTotal = await this.prisma.expense.aggregate({
+          _sum: { amount: true },
+          where: {
+            deletedAt: null,
+            date: { gte: prevMonthStart, lte: prevMonthEnd }
+          },
+        });
+        previousMonthTotal = prevTotal._sum.amount || 0;
+      }
+    }
+    
     return {
       total: total._sum.amount || 0,
+      dailyAverage: Math.round(dailyAverage),
+      previousMonthTotal,
       byCategory: Object.fromEntries(
         byCat.map((r) => [r.category, r._sum.amount || 0]),
+      ),
+      byPaymentMethod: Object.fromEntries(
+        byPayment.map((r) => [r.paymentMethod, r._sum.amount || 0]),
       ),
     };
   }
@@ -97,12 +159,19 @@ export class ExpenseService {
 
   async update(id: number, dto: UpdateExpenseDto) {
     await this.findOne(id);
+    
+    let updateData: any = { ...dto };
+    
+    // Manejar la fecha si viene en el DTO
+    if (dto.date) {
+      const dateStr = dto.date.toString();
+      const parts = dateStr.split('-');
+      updateData.date = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+    }
+    
     return this.prisma.expense.update({
       where: { id },
-      data: {
-        ...dto,
-        date: dto.date ? new Date(dto.date) : undefined,
-      },
+      data: updateData,
     });
   }
 

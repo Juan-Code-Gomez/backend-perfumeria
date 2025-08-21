@@ -21,6 +21,58 @@ export class SaleService {
     }
 
     return this.prisma.$transaction(async (tx) => {
+      // Si se proporciona clientId, validar que existe
+      if (data.clientId) {
+        const clientExists = await tx.client.findUnique({
+          where: { id: data.clientId },
+        });
+        
+        if (!clientExists) {
+          throw new Error(`Cliente con ID ${data.clientId} no existe`);
+        }
+      }
+
+      // Obtener información de productos para calcular rentabilidad
+      const productIds = data.details.map(d => d.productId);
+      const products = await tx.product.findMany({
+        where: { id: { in: productIds } },
+        select: { id: true, purchasePrice: true, salePrice: true }
+      });
+
+      // Crear un mapa para acceso rápido a precios
+      const productMap = new Map(products.map(p => [p.id, p]));
+
+      // Preparar detalles con cálculos de rentabilidad
+      const detailsWithProfit = data.details.map((d) => {
+        const product = productMap.get(d.productId);
+        if (!product) {
+          throw new Error(`Producto con ID ${d.productId} no encontrado`);
+        }
+
+        const unitPrice = Number(d.unitPrice);
+        const quantity = Number(d.quantity);
+        const purchasePrice = d.purchasePrice || product.purchasePrice;
+        const suggestedPrice = d.suggestedPrice || product.salePrice;
+        
+        // Cálculos de rentabilidad
+        const totalPrice = quantity * unitPrice;
+        const profitAmount = unitPrice - purchasePrice;
+        const profitMargin = purchasePrice > 0 ? (profitAmount / purchasePrice) * 100 : 0;
+
+        console.log(`💰 Rentabilidad para ${product.id}: Venta $${unitPrice} - Compra $${purchasePrice} = Ganancia $${profitAmount.toFixed(2)} (${profitMargin.toFixed(1)}%)`);
+
+        return {
+          productId: d.productId,
+          quantity,
+          unitPrice,
+          totalPrice,
+          purchasePrice,
+          profitAmount,
+          profitMargin,
+          suggestedPrice,
+        };
+      });
+
       const sale = await tx.sale.create({
         data: {
           date: data.date ? new Date(data.date) : new Date(),
@@ -31,12 +83,7 @@ export class SaleService {
           isPaid,
           paymentMethod: data.paymentMethod,
           details: {
-            create: data.details.map((d) => ({
-              productId: d.productId,
-              quantity: Number(d.quantity),
-              unitPrice: Number(d.unitPrice),
-              totalPrice: Number(d.quantity) * Number(d.unitPrice),
-            })),
+            create: detailsWithProfit,
           },
         },
         include: {
@@ -160,8 +207,8 @@ export class SaleService {
           saleId,
           amount: dto.amount,
           date: dto.date ? new Date(dto.date) : new Date(),
-          method: dto.method,
-          note: dto.note,
+          method: dto.method || null,
+          note: dto.note || null,
         },
       });
 
@@ -465,5 +512,142 @@ export class SaleService {
       // Finaliza el documento
       doc.end();
     });
+  }
+
+  // Método para obtener estadísticas de rentabilidad
+  async getProfitabilityStats(filters: { dateFrom?: string; dateTo?: string }) {
+    const where: any = {};
+
+    if (filters.dateFrom && filters.dateTo) {
+      where.date = {
+        gte: new Date(`${filters.dateFrom}T00:00:00.000Z`),
+        lte: new Date(`${filters.dateTo}T23:59:59.999Z`),
+      };
+    } else {
+      // Por defecto último mes
+      const today = new Date();
+      const lastMonth = new Date(today.getFullYear(), today.getMonth() - 1, today.getDate());
+      where.date = { gte: lastMonth, lte: today };
+    }
+
+    const sales = await this.prisma.sale.findMany({
+      where,
+      include: {
+        details: {
+          include: { product: true }
+        }
+      }
+    });
+
+    // Calcular estadísticas de rentabilidad
+    let totalRevenue = 0;
+    let totalCost = 0;
+    let totalProfit = 0;
+    let totalItems = 0;
+
+    const productProfitability: Record<string, {
+      productName: string;
+      quantity: number;
+      revenue: number;
+      cost: number;
+      profit: number;
+      avgMargin: number;
+      salesCount: number;
+    }> = {};
+
+    sales.forEach(sale => {
+      sale.details.forEach(detail => {
+        const revenue = detail.totalPrice;
+        const cost = detail.quantity * detail.purchasePrice;
+        const profit = detail.profitAmount * detail.quantity;
+
+        totalRevenue += revenue;
+        totalCost += cost;
+        totalProfit += profit;
+        totalItems += detail.quantity;
+
+        // Estadísticas por producto
+        const productKey = `${detail.productId}`;
+        if (!productProfitability[productKey]) {
+          productProfitability[productKey] = {
+            productName: detail.product.name,
+            quantity: 0,
+            revenue: 0,
+            cost: 0,
+            profit: 0,
+            avgMargin: 0,
+            salesCount: 0,
+          };
+        }
+
+        const productStats = productProfitability[productKey];
+        productStats.quantity += detail.quantity;
+        productStats.revenue += revenue;
+        productStats.cost += cost;
+        productStats.profit += profit;
+        productStats.salesCount += 1;
+        productStats.avgMargin = productStats.cost > 0 ? (productStats.profit / productStats.cost) * 100 : 0;
+      });
+    });
+
+    // Convertir a array y ordenar por rentabilidad
+    const topProfitableProducts = Object.values(productProfitability)
+      .sort((a, b) => b.profit - a.profit)
+      .slice(0, 10);
+
+    const overallMargin = totalCost > 0 ? (totalProfit / totalCost) * 100 : 0;
+
+    return {
+      success: true,
+      data: {
+        period: {
+          from: filters.dateFrom || 'último mes',
+          to: filters.dateTo || 'hoy'
+        },
+        totals: {
+          totalRevenue: Math.round(totalRevenue * 100) / 100,
+          totalCost: Math.round(totalCost * 100) / 100,
+          totalProfit: Math.round(totalProfit * 100) / 100,
+          overallMargin: Math.round(overallMargin * 100) / 100,
+          totalItems,
+          salesCount: sales.length,
+        },
+        topProfitableProducts,
+        dailyProfits: this.calculateDailyProfits(sales),
+      }
+    };
+  }
+
+  private calculateDailyProfits(sales: any[]) {
+    const dailyData: Record<string, { date: string; revenue: number; cost: number; profit: number; margin: number }> = {};
+
+    sales.forEach(sale => {
+      const dateKey = sale.date.toISOString().split('T')[0];
+      
+      if (!dailyData[dateKey]) {
+        dailyData[dateKey] = { date: dateKey, revenue: 0, cost: 0, profit: 0, margin: 0 };
+      }
+
+      sale.details.forEach((detail: any) => {
+        dailyData[dateKey].revenue += detail.totalPrice;
+        dailyData[dateKey].cost += detail.quantity * detail.purchasePrice;
+        dailyData[dateKey].profit += detail.profitAmount * detail.quantity;
+      });
+
+      // Calcular margen diario
+      if (dailyData[dateKey].cost > 0) {
+        dailyData[dateKey].margin = (dailyData[dateKey].profit / dailyData[dateKey].cost) * 100;
+      }
+    });
+
+    return Object.values(dailyData)
+      .map(day => ({
+        ...day,
+        revenue: Math.round(day.revenue * 100) / 100,
+        cost: Math.round(day.cost * 100) / 100,
+        profit: Math.round(day.profit * 100) / 100,
+        margin: Math.round(day.margin * 100) / 100,
+      }))
+      .sort((a, b) => a.date.localeCompare(b.date));
   }
 }

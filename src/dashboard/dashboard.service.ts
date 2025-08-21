@@ -1,246 +1,306 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { startOfDay, endOfDay, startOfMonth, endOfMonth, subMonths, format } from 'date-fns';
+import { startOfDay, endOfDay, startOfMonth, endOfMonth, subMonths, subDays, format } from 'date-fns';
 
 @Injectable()
 export class DashboardService {
   constructor(private prisma: PrismaService) {}
 
-  async getSummary() {
+  async getExecutiveSummary() {
     const now = new Date();
     const todayStart = startOfDay(now);
     const todayEnd = endOfDay(now);
     const monthStart = startOfMonth(now);
     const monthEnd = endOfMonth(now);
-
-    // 1. Ventas del día y del mes (incluyendo detalles y productos)
-    const ventasDia = await this.prisma.sale.findMany({
-      where: { date: { gte: todayStart, lte: todayEnd } },
-      include: { details: { include: { product: true } } },
-    });
-    const ventasMes = await this.prisma.sale.findMany({
-      where: { date: { gte: monthStart, lte: monthEnd } },
-      include: { details: { include: { product: true } } },
-    });
-
-    // 2. Egresos del día y del mes
-    const egresosDia = await this.prisma.expense.findMany({
-      where: { 
-        date: { gte: todayStart, lte: todayEnd },
-        deletedAt: null 
-      },
-    });
-    const egresosMes = await this.prisma.expense.findMany({
-      where: { 
-        date: { gte: monthStart, lte: monthEnd },
-        deletedAt: null 
-      },
-    });
-
-    // 3. Deuda total a proveedores (compras pendientes de pago)
-    const comprasPendientes = await this.prisma.purchase.findMany({
-      where: { isPaid: false },
-      select: { totalAmount: true, paidAmount: true },
-    });
-    const deudaProveedores = comprasPendientes.reduce(
-      (sum, c) => sum + (c.totalAmount - c.paidAmount),
-      0,
-    );
-
-    // 4. Ventas pendientes de cobro (ventas a crédito)
-    const ventasPendientes = await this.prisma.sale.findMany({
-      where: { isPaid: false },
-      select: { totalAmount: true, paidAmount: true },
-    });
-    const deudaClientes = ventasPendientes.reduce(
-      (sum, v) => sum + (v.totalAmount - v.paidAmount),
-      0,
-    );
-
-    // 5. Productos con stock bajo
-    const productosStockBajo = await this.prisma.product.findMany({
-      where: {
-        minStock: { not: null },
-      },
-      include: { category: true, unit: true },
-    });
-    const alertasStock = productosStockBajo.filter(
-      (p) => p.stock <= (p.minStock ?? 0),
-    );
-
-    // 6. Productos más vendidos del mes
-    const ventasConDetalle = await this.prisma.saleDetail.groupBy({
-      by: ['productId'],
-      where: {
-        sale: {
-          date: { gte: monthStart, lte: monthEnd },
-        },
-      },
-      _sum: { quantity: true },
-      _count: { productId: true },
-      orderBy: { _sum: { quantity: 'desc' } },
-      take: 5,
-    });
-
-    const productosMasVendidos = await Promise.all(
-      ventasConDetalle.map(async (item) => {
-        const producto = await this.prisma.product.findUnique({
-          where: { id: item.productId },
-          include: { category: true },
-        });
-        return {
-          producto,
-          cantidadVendida: item._sum.quantity,
-          vecesVendido: item._count.productId,
-        };
-      }),
-    );
-
-    // 7. Valor total del inventario
-    const todosLosProductos = await this.prisma.product.findMany({
-      select: { stock: true, purchasePrice: true, salePrice: true },
-    });
     
-    const valorInventario = {
-      costo: todosLosProductos.reduce((sum, p) => sum + (p.stock * p.purchasePrice), 0),
-      venta: todosLosProductos.reduce((sum, p) => sum + (p.stock * p.salePrice), 0),
-    };
-
-    // 8. Resumen financiero
-    const totalVentasDia = ventasDia.reduce((sum, v) => sum + v.totalAmount, 0);
-    const totalVentasMes = ventasMes.reduce((sum, v) => sum + v.totalAmount, 0);
-    const totalEgresosDia = egresosDia.reduce((sum, e) => sum + e.amount, 0);
-    const totalEgresosMes = egresosMes.reduce((sum, e) => sum + e.amount, 0);
+    // Mes anterior para comparaciones
+    const lastMonthStart = startOfMonth(subMonths(now, 1));
+    const lastMonthEnd = endOfMonth(subMonths(now, 1));
     
-    // Ganancias brutas del día/mes
-    const gananciasBrutasDia = totalVentasDia - totalEgresosDia;
-    const gananciasBrutasMes = totalVentasMes - totalEgresosMes;
+    // Últimos 7 y 30 días para tendencias
+    const last7Days = subDays(now, 7);
+    const last30Days = subDays(now, 30);
 
-    return {
-      resumenFinanciero: {
-        hoy: {
-          ventas: totalVentasDia,
-          gastos: totalEgresosDia,
-          gananciasBrutas: gananciasBrutasDia,
-          cantidadVentas: ventasDia.length,
-        },
-        mes: {
-          ventas: totalVentasMes,
-          gastos: totalEgresosMes,
-          gananciasBrutas: gananciasBrutasMes,
-          cantidadVentas: ventasMes.length,
-        },
-      },
-      inventario: {
-        valorTotal: valorInventario,
-        alertasStockBajo: alertasStock.length,
-        productos: alertasStock.slice(0, 5), // Solo los primeros 5
-      },
-      cuentas: {
-        porCobrar: deudaClientes,
-        porPagar: deudaProveedores,
-        flujoNeto: deudaClientes - deudaProveedores,
-      },
-      productosMasVendidos,
-      fecha: new Date().toISOString(),
-    };
-  }
-
-  // Nuevo método: Análisis de rentabilidad por período
-  async getAnalisisRentabilidad(meses: number = 6) {
-    const now = new Date();
-    const resultados: any[] = [];
-
-    for (let i = 0; i < meses; i++) {
-      const mesActual = subMonths(now, i);
-      const inicioMes = startOfMonth(mesActual);
-      const finMes = endOfMonth(mesActual);
-
-      const ventas = await this.prisma.sale.findMany({
-        where: { date: { gte: inicioMes, lte: finMes } },
+    // 🔥 MÉTRICAS PRINCIPALES
+    const [
+      salesToday,
+      salesMonth,
+      salesLastMonth,
+      expensesToday,
+      expensesMonth,
+      expensesLastMonth,
+      pendingPurchases,
+      creditSales,
+      topProducts,
+      salesTrend,
+      cashClosingToday
+    ] = await Promise.all([
+      // Ventas de hoy
+      this.prisma.sale.findMany({
+        where: { date: { gte: todayStart, lte: todayEnd } },
         include: { details: { include: { product: true } } },
-      });
-
-      const gastos = await this.prisma.expense.findMany({
+      }),
+      
+      // Ventas del mes
+      this.prisma.sale.findMany({
+        where: { date: { gte: monthStart, lte: monthEnd } },
+        include: { details: { include: { product: true } } },
+      }),
+      
+      // Ventas mes anterior
+      this.prisma.sale.findMany({
+        where: { date: { gte: lastMonthStart, lte: lastMonthEnd } },
+      }),
+      
+      // Gastos de hoy
+      this.prisma.expense.findMany({
         where: { 
-          date: { gte: inicioMes, lte: finMes },
+          date: { gte: todayStart, lte: todayEnd },
           deletedAt: null 
         },
-      });
-
-      const totalVentas = ventas.reduce((sum, v) => sum + v.totalAmount, 0);
-      const totalGastos = gastos.reduce((sum, g) => sum + g.amount, 0);
+      }),
       
-      // Calcular costo de ventas (precio de compra de productos vendidos)
-      const costoVentas = ventas.reduce((sum, venta) => {
-        return sum + venta.details.reduce((detailSum, detail) => {
-          return detailSum + (detail.quantity * detail.product.purchasePrice);
-        }, 0);
-      }, 0);
+      // Gastos del mes
+      this.prisma.expense.findMany({
+        where: { 
+          date: { gte: monthStart, lte: monthEnd },
+          deletedAt: null 
+        },
+      }),
+      
+      // Gastos mes anterior
+      this.prisma.expense.findMany({
+        where: { 
+          date: { gte: lastMonthStart, lte: lastMonthEnd },
+          deletedAt: null 
+        },
+      }),
+      
+      // Deudas a proveedores
+      this.prisma.purchase.findMany({
+        where: { isPaid: false },
+        include: { supplier: true },
+      }),
+      
+      // Ventas a crédito pendientes
+      this.prisma.sale.findMany({
+        where: { isPaid: false },
+        include: { client: true },
+      }),
+      
+      // Productos más vendidos (último mes)
+      this.prisma.saleDetail.findMany({
+        where: {
+          sale: { date: { gte: last30Days } }
+        },
+        include: { product: true },
+      }),
+      
+      // Tendencia de ventas (últimos 7 días)
+      this.prisma.sale.findMany({
+        where: { date: { gte: last7Days } },
+        orderBy: { date: 'asc' },
+      }),
+      
+      // Cierre de caja de hoy
+      this.prisma.cashClosing.findFirst({
+        where: { 
+          date: { gte: todayStart, lte: todayEnd }
+        },
+      }),
+    ]);
 
-      const utilidadBruta = totalVentas - costoVentas;
-      const utilidadNeta = utilidadBruta - totalGastos;
-      const margenBruto = totalVentas > 0 ? (utilidadBruta / totalVentas) * 100 : 0;
-      const margenNeto = totalVentas > 0 ? (utilidadNeta / totalVentas) * 100 : 0;
-
-      resultados.push({
-        mes: format(mesActual, 'yyyy-MM'),
-        nombreMes: format(mesActual, 'MMMM yyyy'),
-        ventas: totalVentas,
-        costoVentas,
-        gastos: totalGastos,
-        utilidadBruta,
-        utilidadNeta,
-        margenBruto: parseFloat(margenBruto.toFixed(2)),
-        margenNeto: parseFloat(margenNeto.toFixed(2)),
-        cantidadVentas: ventas.length,
+    // 💰 CÁLCULOS PRINCIPALES
+    const totalSalesToday = salesToday.reduce((sum, s) => sum + s.totalAmount, 0);
+    const totalSalesMonth = salesMonth.reduce((sum, s) => sum + s.totalAmount, 0);
+    const totalSalesLastMonth = salesLastMonth.reduce((sum, s) => sum + s.totalAmount, 0);
+    
+    const totalExpensesToday = expensesToday.reduce((sum, e) => sum + e.amount, 0);
+    const totalExpensesMonth = expensesMonth.reduce((sum, e) => sum + e.amount, 0);
+    const totalExpensesLastMonth = expensesLastMonth.reduce((sum, e) => sum + e.amount, 0);
+    
+    // 🏆 UTILIDAD NETA
+    const profitToday = totalSalesToday - totalExpensesToday;
+    const profitMonth = totalSalesMonth - totalExpensesMonth;
+    const profitLastMonth = totalSalesLastMonth - totalExpensesLastMonth;
+    
+    // 📈 CRECIMIENTO
+    const salesGrowth = totalSalesLastMonth > 0 ? 
+      ((totalSalesMonth - totalSalesLastMonth) / totalSalesLastMonth) * 100 : 0;
+    const expenseGrowth = totalExpensesLastMonth > 0 ? 
+      ((totalExpensesMonth - totalExpensesLastMonth) / totalExpensesLastMonth) * 100 : 0;
+    
+    // 💸 DEUDAS Y CRÉDITOS
+    const debtToSuppliers = pendingPurchases.reduce(
+      (sum, p) => sum + (p.totalAmount - (p.paidAmount || 0)), 0
+    );
+    const creditFromClients = creditSales.reduce(
+      (sum, s) => sum + (s.totalAmount - (s.paidAmount || 0)), 0
+    );
+    
+    // 🏆 TOP PRODUCTOS
+    const productSales = new Map();
+    topProducts.forEach(detail => {
+      const productId = detail.product.id;
+      if (productSales.has(productId)) {
+        productSales.get(productId).quantity += detail.quantity;
+      } else {
+        productSales.set(productId, {
+          product: detail.product,
+          quantity: detail.quantity,
+          revenue: detail.quantity * detail.unitPrice
+        });
+      }
+    });
+    
+    const topSellingProducts = Array.from(productSales.values())
+      .sort((a, b) => b.quantity - a.quantity)
+      .slice(0, 5);
+    
+    // 📊 TENDENCIA DE VENTAS (últimos 7 días)
+    const salesByDay: Array<{
+      date: string;
+      day: string;
+      sales: number;
+      transactions: number;
+    }> = [];
+    for (let i = 6; i >= 0; i--) {
+      const day = subDays(now, i);
+      const dayStart = startOfDay(day);
+      const dayEnd = endOfDay(day);
+      
+      const daySales = salesTrend.filter(s => 
+        s.date >= dayStart && s.date <= dayEnd
+      );
+      
+      salesByDay.push({
+        date: format(day, 'yyyy-MM-dd'),
+        day: format(day, 'EEE'),
+        sales: daySales.reduce((sum, s) => sum + s.totalAmount, 0),
+        transactions: daySales.length
+      });
+    }
+    
+    // 💳 MÉTODOS DE PAGO (mes actual)
+    const paymentMethods = {
+      efectivo: salesMonth.filter(s => s.paymentMethod === 'Efectivo' && s.isPaid).reduce((sum, s) => sum + s.totalAmount, 0),
+      tarjeta: salesMonth.filter(s => s.paymentMethod === 'Tarjeta' && s.isPaid).reduce((sum, s) => sum + s.totalAmount, 0),
+      transferencia: salesMonth.filter(s => s.paymentMethod === 'Transferencia' && s.isPaid).reduce((sum, s) => sum + s.totalAmount, 0),
+      credito: salesMonth.filter(s => s.paymentMethod === 'Crédito' || !s.isPaid).reduce((sum, s) => sum + s.totalAmount, 0)
+    };
+    
+    // 🚨 ALERTAS
+    const alerts: Array<{
+      type: string;
+      severity: 'low' | 'medium' | 'high';
+      message: string;
+      data?: any;
+    }> = [];
+    
+    // Stock bajo
+    const lowStockProducts = await this.prisma.product.findMany({
+      where: {
+        AND: [
+          { minStock: { not: null } },
+          { stock: { lte: this.prisma.product.fields.minStock } }
+        ]
+      },
+      take: 5
+    });
+    
+    if (lowStockProducts.length > 0) {
+      alerts.push({
+        type: 'stock',
+        severity: 'high',
+        message: `${lowStockProducts.length} productos con stock bajo`,
+        data: lowStockProducts
+      });
+    }
+    
+    // Créditos vencidos (más de 30 días)
+    const oldCredits = creditSales.filter(s => {
+      const daysDiff = (now.getTime() - s.date.getTime()) / (1000 * 3600 * 24);
+      return daysDiff > 30;
+    });
+    
+    if (oldCredits.length > 0) {
+      alerts.push({
+        type: 'credits',
+        severity: 'medium',
+        message: `${oldCredits.length} créditos vencidos`,
+        data: oldCredits.slice(0, 5)
+      });
+    }
+    
+    // Día sin cerrar caja
+    if (!cashClosingToday) {
+      alerts.push({
+        type: 'cash_closing',
+        severity: 'medium',
+        message: 'No se ha realizado el cierre de caja de hoy'
       });
     }
 
-    return resultados.reverse(); // Mostrar del más antiguo al más reciente
-  }
-
-  // Nuevo método: Productos menos rentables
-  async getProductosMenosRentables(limit: number = 10) {
-    const productos = await this.prisma.product.findMany({
-      include: { 
-        category: true, 
-        unit: true,
-        SaleDetail: {
-          select: {
-            quantity: true,
-            unitPrice: true,
-          }
+    return {
+      // 🎯 KPIs PRINCIPALES
+      kpis: {
+        today: {
+          sales: totalSalesToday,
+          expenses: totalExpensesToday,
+          profit: profitToday,
+          transactions: salesToday.length,
+          cashInRegister: cashClosingToday?.closingCash || 0
+        },
+        month: {
+          sales: totalSalesMonth,
+          expenses: totalExpensesMonth,
+          profit: profitMonth,
+          transactions: salesMonth.length,
+          salesGrowth,
+          expenseGrowth
+        },
+        year: {
+          // TODO: Implementar métricas anuales
         }
       },
-    });
-
-    const analisisProductos = productos.map(producto => {
-      const totalVendido = producto.SaleDetail.reduce((sum, detail) => sum + detail.quantity, 0);
-      const ingresoTotal = producto.SaleDetail.reduce((sum, detail) => sum + (detail.quantity * detail.unitPrice), 0);
-      const costoTotal = totalVendido * producto.purchasePrice;
-      const utilidad = ingresoTotal - costoTotal;
-      const margen = ingresoTotal > 0 ? ((utilidad / ingresoTotal) * 100) : 0;
       
-      return {
-        id: producto.id,
-        nombre: producto.name,
-        categoria: producto.category.name,
-        stock: producto.stock,
-        precioCompra: producto.purchasePrice,
-        precioVenta: producto.salePrice,
-        totalVendido,
-        ingresoTotal,
-        costoTotal,
-        utilidad,
-        margen: parseFloat(margen.toFixed(2)),
-        rotacion: totalVendido > 0 ? 'Alta' : 'Baja',
-      };
-    });
-
-    // Ordenar por margen ascendente (menos rentables primero)
-    return analisisProductos
-      .sort((a, b) => a.margen - b.margen)
-      .slice(0, limit);
+      // 📊 GRÁFICOS
+      charts: {
+        salesTrend: salesByDay,
+        topProducts: topSellingProducts,
+        paymentMethods,
+        expensesByCategory: expensesMonth.reduce((acc, exp) => {
+          acc[exp.category] = (acc[exp.category] || 0) + exp.amount;
+          return acc;
+        }, {})
+      },
+      
+      // 💰 FINANZAS
+      finances: {
+        cashFlow: {
+          income: totalSalesMonth,
+          expenses: totalExpensesMonth,
+          netFlow: profitMonth
+        },
+        accounts: {
+          receivable: creditFromClients,
+          payable: debtToSuppliers,
+          netPosition: creditFromClients - debtToSuppliers
+        }
+      },
+      
+      // 🚨 ALERTAS
+      alerts,
+      
+      // 📅 METADATA
+      metadata: {
+        generatedAt: now.toISOString(),
+        period: {
+          today: format(now, 'yyyy-MM-dd'),
+          month: format(now, 'yyyy-MM'),
+          lastUpdate: now
+        }
+      }
+    };
   }
 }

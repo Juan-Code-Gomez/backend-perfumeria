@@ -62,4 +62,12 @@ export class SaleController {
     res.set({ 'Content-Type': 'application/pdf' });
     res.send(buffer);
   }
+
+  @Get('analytics/profitability')
+  async getProfitabilityStats(
+    @Query('dateFrom') dateFrom?: string,
+    @Query('dateTo') dateTo?: string,
+  ) {
+    return this.saleService.getProfitabilityStats({ dateFrom, dateTo });
+  }
 }

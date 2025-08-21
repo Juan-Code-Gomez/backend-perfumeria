@@ -7,6 +7,7 @@ export class CreateExpenseDto {
   @IsNumber() amount: number;
   @IsString() description: string;
   @IsString() category: string;
+  @IsString() paymentMethod: string;
   @IsOptional() @IsString() notes?: string;
 }
 
@@ -15,5 +16,6 @@ export class UpdateExpenseDto {
   @IsOptional() @IsNumber() amount?: number;
   @IsOptional() @IsString() description?: string;
   @IsOptional() @IsEnum(ExpenseCategory) category?: ExpenseCategory;
+  @IsOptional() @IsString() paymentMethod?: string;
   @IsOptional() @IsString() notes?: string;
 }

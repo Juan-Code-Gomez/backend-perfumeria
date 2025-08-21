@@ -273,16 +273,20 @@ model Sale {
 }
 
 model SaleDetail {
-  id         Int      @id @default(autoincrement())
-  saleId     Int
-  sale       Sale     @relation(fields: [saleId], references: [id])
-  productId  Int
-  product    Product  @relation(fields: [productId], references: [id])
-  quantity   Float
-  unitPrice  Float
-  totalPrice Float
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id            Int      @id @default(autoincrement())
+  saleId        Int
+  sale          Sale     @relation(fields: [saleId], references: [id])
+  productId     Int
+  product       Product  @relation(fields: [productId], references: [id])
+  quantity      Float
+  unitPrice     Float    // Precio de venta real (variable por regateo/sobreprecio)
+  totalPrice    Float    // unitPrice * quantity
+  purchasePrice Float    // Precio de compra al momento de la venta
+  profitAmount  Float    // Ganancia real = unitPrice - purchasePrice
+  profitMargin  Float    // Margen % real = (profitAmount / purchasePrice) * 100
+  suggestedPrice Float?  // Precio sugerido original del producto
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 }
 
 model ProductMovement {

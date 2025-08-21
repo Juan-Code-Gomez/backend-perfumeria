@@ -30,13 +30,14 @@ export class CashClosingController {
     return this.cashClosingService.findAll();
   }
 
+  @Get('summary')
+  async getSummary(@Query('date') date: string) {
+    // Devolver solo los datos, sin wrapper de success
+    return this.cashClosingService.getSummary(date);
+  }
+
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.cashClosingService.findOne(Number(id));
-  }
-
-  @Get('summary')
-  async getSummary(@Query('date') date: string) {
-    return this.cashClosingService.getSummary(date);
   }
 }

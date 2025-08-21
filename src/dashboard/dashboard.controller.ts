@@ -1,4 +1,4 @@
-import { Controller, Get, UseGuards, Query, ParseIntPipe } from '@nestjs/common';
+import { Controller, Get, UseGuards, Query } from '@nestjs/common';
 import { DashboardService } from './dashboard.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard'; // Protegido solo para usuarios logueados
 
@@ -8,19 +8,28 @@ export class DashboardController {
   constructor(private readonly dashboardService: DashboardService) {}
 
   @Get('summary')
-  summary() {
-    return this.dashboardService.getSummary();
+  async getSummary(
+    @Query('dateFrom') dateFrom?: string,
+    @Query('dateTo') dateTo?: string,
+  ) {
+    // Por ahora, redirigir al executive summary pero con formato compatible
+    const executiveSummary = await this.dashboardService.getExecutiveSummary();
+    
+    // Mapear al formato esperado por el Dashboard normal
+    return {
+      totalSales: executiveSummary.kpis.month.sales,
+      totalProfit: executiveSummary.kpis.month.profit,
+      totalExpenses: executiveSummary.kpis.month.expenses,
+      cashClosing: executiveSummary.kpis.today.cashInRegister,
+      // Agregar otros campos si son necesarios
+      salesChart: executiveSummary.charts.salesTrend,
+      topProducts: executiveSummary.charts.topProducts,
+      alerts: executiveSummary.alerts
+    };
   }
 
-  @Get('rentabilidad')
-  async getAnalisisRentabilidad(@Query('meses') meses?: string) {
-    const mesesNum = meses ? parseInt(meses, 10) : 6;
-    return this.dashboardService.getAnalisisRentabilidad(mesesNum);
-  }
-
-  @Get('productos-menos-rentables')
-  async getProductosMenosRentables(@Query('limit') limit?: string) {
-    const limitNum = limit ? parseInt(limit, 10) : 10;
-    return this.dashboardService.getProductosMenosRentables(limitNum);
+  @Get('executive-summary')
+  async getExecutiveSummary() {
+    return this.dashboardService.getExecutiveSummary();
   }
 }

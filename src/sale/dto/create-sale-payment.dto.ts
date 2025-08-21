@@ -1,6 +1,18 @@
+import { IsNumber, IsOptional, IsString, IsDateString } from 'class-validator';
+
 export class CreateSalePaymentDto {
+  @IsNumber()
   amount: number;
+
+  @IsOptional()
+  @IsString()
   method?: string;
+
+  @IsOptional()
+  @IsString()
   note?: string;
-  date?: Date;
+
+  @IsOptional()
+  @IsDateString()
+  date?: string;
 }

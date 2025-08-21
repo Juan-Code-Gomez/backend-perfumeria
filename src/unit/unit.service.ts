@@ -32,7 +32,11 @@ export class UnitService {
         },
       });
 
-      return unit;
+      return {
+        success: true,
+        data: unit,
+        message: 'Unidad creada exitosamente',
+      };
     } catch (error) {
       if (error.code === 'P2002') {
         throw new ConflictException('Ya existe una unidad con este nombre');
@@ -77,7 +81,10 @@ export class UnitService {
       ],
     });
 
-    return units;
+    return {
+      success: true,
+      data: units,
+    };
   }
 
   async findOne(id: number) {
@@ -112,7 +119,10 @@ export class UnitService {
       throw new NotFoundException('Unidad no encontrada');
     }
 
-    return unit;
+    return {
+      success: true,
+      data: unit,
+    };
   }
 
   async update(id: number, updateUnitDto: UpdateUnitDto) {
@@ -145,7 +155,11 @@ export class UnitService {
         },
       });
 
-      return updatedUnit;
+      return {
+        success: true,
+        data: updatedUnit,
+        message: 'Unidad actualizada exitosamente',
+      };
     } catch (error) {
       if (error.code === 'P2002') {
         throw new ConflictException('Ya existe una unidad con este nombre');
@@ -181,6 +195,7 @@ export class UnitService {
     });
 
     return {
+      success: true,
       message: 'Unidad eliminada exitosamente',
     };
   }
@@ -209,7 +224,11 @@ export class UnitService {
       },
     });
 
-    return updatedUnit;
+    return {
+      success: true,
+      data: updatedUnit,
+      message: `Unidad ${updatedUnit.isActive ? 'activada' : 'desactivada'} exitosamente`,
+    };
   }
 
   // Método para obtener estadísticas de unidades
@@ -238,7 +257,7 @@ export class UnitService {
     });
 
     // Top unidades por cantidad de productos
-    const topUnits = await this.prisma.unit.findMany({
+    const mostUsedUnits = await this.prisma.unit.findMany({
       include: {
         _count: {
           select: {
@@ -254,22 +273,33 @@ export class UnitService {
       take: 5,
     });
 
+    // Unidades recientes
+    const recentUnits = await this.prisma.unit.findMany({
+      orderBy: {
+        createdAt: 'desc',
+      },
+      take: 5,
+    });
+
     return {
-      totalUnits,
-      activeUnits,
-      inactiveUnits: totalUnits - activeUnits,
-      unitsWithProducts,
-      unitsWithoutProducts: totalUnits - unitsWithProducts,
-      unitsByType: unitsByType.map(item => ({
-        type: item.unitType || 'Sin tipo',
-        count: item._count.id,
-      })),
-      topUnits: topUnits.map(unit => ({
-        id: unit.id,
-        name: unit.name,
-        symbol: unit.symbol,
-        productCount: unit._count.products,
-      })),
+      success: true,
+      data: {
+        totalUnits,
+        activeUnits,
+        inactiveUnits: totalUnits - activeUnits,
+        unitsWithProducts,
+        unitsByType: unitsByType.map(item => ({
+          type: item.unitType || 'Sin tipo',
+          count: item._count.id,
+        })),
+        mostUsedUnits: mostUsedUnits.map(unit => ({
+          id: unit.id,
+          name: unit.name,
+          symbol: unit.symbol,
+          productCount: unit._count.products,
+        })),
+        recentUnits,
+      },
     };
   }
 
@@ -292,6 +322,9 @@ export class UnitService {
       },
     });
 
-    return units;
+    return {
+      success: true,
+      data: units,
+    };
   }
 }
