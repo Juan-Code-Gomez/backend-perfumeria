@@ -1,5 +1,5 @@
 [build]
-command = "npm run railway:build"
+builder = "nixpacks"
 
 [deploy]
 startCommand = "npm run railway:start"
@@ -13,3 +13,6 @@ variables = { NODE_ENV = "production" }
 
 [phases.setup]
 nixPkgs = ["nodejs_20", "npm-10_x", "openssl"]
+
+[phases.build]
+cmds = ["npm run railway:build"]
