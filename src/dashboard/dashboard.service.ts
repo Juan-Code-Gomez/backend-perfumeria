@@ -1,10 +1,16 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { CapitalService } from '../capital/capital.service';
+import { InvoiceService } from '../invoice/invoice.service';
 import { startOfDay, endOfDay, startOfMonth, endOfMonth, subMonths, subDays, format } from 'date-fns';
 
 @Injectable()
 export class DashboardService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private capitalService: CapitalService,
+    private invoiceService: InvoiceService,
+  ) {}
 
   async getExecutiveSummary() {
     const now = new Date();
@@ -33,7 +39,10 @@ export class DashboardService {
       creditSales,
       topProducts,
       salesTrend,
-      cashClosingToday
+      cashClosingToday,
+      allProducts,
+      capitalData,
+      invoiceSummary
     ] = await Promise.all([
       // Ventas de hoy
       this.prisma.sale.findMany({
@@ -108,6 +117,22 @@ export class DashboardService {
           date: { gte: todayStart, lte: todayEnd }
         },
       }),
+      
+      // Todos los productos para calcular inversión total
+      this.prisma.product.findMany({
+        select: {
+          id: true,
+          name: true,
+          stock: true,
+          purchasePrice: true,
+        }
+      }),
+      
+      // Capital actual (efectivo y banco)
+      this.capitalService.getCapitalSummary(),
+      
+      // Resumen de facturas
+      this.invoiceService.getInvoiceSummary(),
     ]);
 
     // 💰 CÁLCULOS PRINCIPALES
@@ -118,6 +143,11 @@ export class DashboardService {
     const totalExpensesToday = expensesToday.reduce((sum, e) => sum + e.amount, 0);
     const totalExpensesMonth = expensesMonth.reduce((sum, e) => sum + e.amount, 0);
     const totalExpensesLastMonth = expensesLastMonth.reduce((sum, e) => sum + e.amount, 0);
+    
+    // 💼 INVERSIÓN TOTAL EN PRODUCTOS
+    const totalInvestment = allProducts.reduce((sum, product) => {
+      return sum + (product.stock * product.purchasePrice);
+    }, 0);
     
     // 🏆 UTILIDAD NETA
     const profitToday = totalSalesToday - totalExpensesToday;
@@ -277,6 +307,17 @@ export class DashboardService {
       
       // 💰 FINANZAS
       finances: {
+        investment: {
+          totalInvestment,
+          totalProducts: allProducts.length,
+          totalUnits: allProducts.reduce((sum, p) => sum + p.stock, 0)
+        },
+        capital: {
+          cash: capitalData?.cash || 0,
+          bank: capitalData?.bank || 0,
+          total: capitalData?.total || 0,
+          lastUpdate: capitalData?.lastUpdate || null
+        },
         cashFlow: {
           income: totalSalesMonth,
           expenses: totalExpensesMonth,
@@ -286,6 +327,16 @@ export class DashboardService {
           receivable: creditFromClients,
           payable: debtToSuppliers,
           netPosition: creditFromClients - debtToSuppliers
+        },
+        invoices: {
+          total: invoiceSummary?.total?.amount || 0,
+          pending: invoiceSummary?.pending?.pending || 0,
+          overdue: invoiceSummary?.overdue?.pending || 0,
+          count: {
+            total: invoiceSummary?.total?.count || 0,
+            pending: invoiceSummary?.pending?.count || 0,
+            overdue: invoiceSummary?.overdue?.count || 0
+          }
         }
       },
       

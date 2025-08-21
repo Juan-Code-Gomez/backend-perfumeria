@@ -508,3 +508,35 @@ enum NotificationFrequency {
   DAILY
   WEEKLY
 }
+
+// Modelo para gestión de capital (efectivo y banco)
+model Capital {
+  id              Int      @id @default(autoincrement())
+  cash            Float    @default(0)    // Dinero en efectivo
+  bank            Float    @default(0)    // Dinero en banco
+  description     String?  // Descripción del registro
+  date            DateTime @default(now()) // Fecha del registro
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  @@index([date])
+}
+
+// Modelo para gestión de facturas
+model Invoice {
+  id              Int      @id @default(autoincrement())
+  invoiceNumber   String   @unique // Número de la factura
+  supplierName    String   // Nombre del proveedor
+  amount          Float    // Monto total de la factura
+  paidAmount      Float    @default(0) // Monto pagado
+  status          String   @default("PENDING") // PENDING, PARTIAL, PAID
+  description     String?  // Descripción de la factura
+  invoiceDate     DateTime // Fecha de la factura
+  dueDate         DateTime? // Fecha de vencimiento
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  @@index([status])
+  @@index([invoiceDate])
+  @@index([dueDate])
+}

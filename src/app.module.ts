@@ -16,6 +16,8 @@ import { CashClosingModule } from './cash-closing/cash-closing.module';
 import { ExpenseModule } from './expense/expense.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { ClientsModule } from './clients/clients.module';
+import { CapitalModule } from './capital/capital.module';
+import { InvoiceModule } from './invoice/invoice.module';
 import { ScheduleModule } from '@nestjs/schedule';
 import { RecurringExpenseModule } from './recurring-expense/recurring-expense.module';
 import { ConfigModule } from './config/config.module';
@@ -43,6 +45,8 @@ import { InventoryAutomationModule } from './inventory-automation/inventory-auto
     ExpenseModule,
     DashboardModule,
     ClientsModule,
+    CapitalModule,
+    InvoiceModule,
     ScheduleModule.forRoot(),
     RecurringExpenseModule,
     ReportsModule,
