@@ -9,7 +9,7 @@ import { Logger } from '@nestjs/common';
 
 async function bootstrap() {
   const logger = new Logger('Bootstrap');
-  
+
   const app = await NestFactory.create(AppModule);
   const configService = app.get(ConfigService);
 
@@ -27,7 +27,12 @@ async function bootstrap() {
 
   // CORS configuration
   app.enableCors({
-    origin: ['https://perfumeria-sistema.vercel.app', 'https://perfumeria-sistema-production.up.railway.app'],
+    origin: [
+      'https://perfumeria-sistema.vercel.app',
+      'https://perfumeria-sistema-production.up.railway.app',
+      'https://perfumeria-sistema-production-1c59.up.railway.app',
+      'https://perfumeria-sistema-production.up.railway.app',
+    ],
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
@@ -38,7 +43,7 @@ async function bootstrap() {
 
   const port = configService.port;
   await app.listen(port);
-  
+
   logger.log(`🚀 Application is running on: http://localhost:${port}/api`);
   logger.log(`📖 Environment: ${configService.nodeEnv}`);
   logger.log(`🌐 Allowed Origins: ${configService.allowedOrigins.join(', ')}`);
