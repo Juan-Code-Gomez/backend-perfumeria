@@ -447,4 +447,101 @@ export class SupplierService {
 
     return updatedSupplier;
   }
+
+  // Método para obtener resumen financiero de proveedores
+  async getFinancialSummary() {
+    const result = await this.prisma.supplier.aggregate({
+      where: {
+        isActive: true,
+      },
+      _sum: {
+        currentDebt: true,
+        creditLimit: true,
+      },
+      _count: {
+        id: true,
+      },
+    });
+
+    const suppliersWithDebt = await this.prisma.supplier.count({
+      where: {
+        currentDebt: { gt: 0 },
+        isActive: true,
+      },
+    });
+
+    const topDebtors = await this.prisma.supplier.findMany({
+      where: {
+        currentDebt: { gt: 0 },
+        isActive: true,
+      },
+      orderBy: {
+        currentDebt: 'desc',
+      },
+      take: 5,
+      select: {
+        id: true,
+        name: true,
+        currentDebt: true,
+        creditLimit: true,
+      },
+    });
+
+    return {
+      totalSuppliers: result._count.id,
+      totalDebt: result._sum.currentDebt || 0,
+      totalCreditLimit: result._sum.creditLimit || 0,
+      suppliersWithDebt,
+      topDebtors,
+      creditUtilization: (result._sum.creditLimit || 0) > 0 
+        ? ((result._sum.currentDebt || 0) / (result._sum.creditLimit || 0)) * 100 
+        : 0,
+    };
+  }
+
+  // Método para registrar pago a proveedor
+  async registerPayment(supplierId: number, amount: number, paymentMethod: string, description?: string) {
+    const supplier = await this.findOne(supplierId);
+    
+    if (amount <= 0) {
+      throw new Error('El monto del pago debe ser mayor a 0');
+    }
+
+    if (amount > supplier.currentDebt) {
+      throw new Error('El pago no puede ser mayor a la deuda actual');
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      // Actualizar deuda del proveedor
+      const updatedSupplier = await tx.supplier.update({
+        where: { id: supplierId },
+        data: {
+          currentDebt: { decrement: amount },
+          updatedAt: new Date(),
+        },
+      });
+
+      // Registrar el movimiento de capital (salida)
+      await tx.capitalMovement.create({
+        data: {
+          type: 'EGRESO',
+          amount: amount,
+          description: description || `Pago a proveedor ${supplier.name}`,
+          category: 'PROVEEDOR',
+          paymentMethod: paymentMethod,
+          date: new Date(),
+        },
+      });
+
+      return {
+        supplier: updatedSupplier,
+        payment: {
+          amount,
+          paymentMethod,
+          description,
+          date: new Date(),
+        },
+      };
+    });
+  }
 }

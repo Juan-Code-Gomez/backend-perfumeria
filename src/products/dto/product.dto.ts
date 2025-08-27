@@ -39,6 +39,12 @@ export enum Gender {
   UNISEX = 'UNISEX'
 }
 
+export enum SalesType {
+  VENTA = 'VENTA',
+  INSUMO = 'INSUMO',
+  COMBO = 'COMBO'
+}
+
 // DTO para componentes de productos compuestos
 export class ProductComponentDto {
   @IsInt()
@@ -105,6 +111,10 @@ export class CreateProductDto {
   @IsEnum(ProductType)
   @IsOptional()
   productType?: ProductType = ProductType.SIMPLE;
+
+  @IsEnum(SalesType)
+  @IsOptional()
+  salesType?: SalesType = SalesType.VENTA;
 
   @IsString()
   @IsOptional()
@@ -267,6 +277,10 @@ export class UpdateProductDto {
   @IsOptional()
   @Type(() => Number)
   unitId?: number;
+
+  @IsEnum(SalesType)
+  @IsOptional()
+  salesType?: SalesType;
 
   @IsNumber()
   @Min(0)

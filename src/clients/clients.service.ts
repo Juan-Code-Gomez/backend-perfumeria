@@ -6,31 +6,58 @@ import { Prisma } from '@prisma/client';
 export class ClientsService {
   constructor(private prisma: PrismaService) {}
 
-  createClient(data: Prisma.ClientCreateInput) {
-    return this.prisma.client.create({ data });
+  async createClient(data: Prisma.ClientCreateInput) {
+    const client = await this.prisma.client.create({ data });
+    return {
+      success: true,
+      data: client,
+    };
   }
 
-  findClients(name?: string) {
-    return this.prisma.client.findMany({
-      where: {
+  async findClients(name?: string) {
+    const clients = await this.prisma.client.findMany({
+      where: name ? {
         name: { contains: name, mode: 'insensitive' },
-      },
+      } : {},
+      orderBy: { createdAt: 'desc' },
     });
+    
+    return {
+      success: true,
+      data: clients,
+      timestamp: new Date().toISOString(),
+    };
   }
 
-  getClientById(id: number) {
-    return this.prisma.client.findUnique({ where: { id } });
+  async getClientById(id: number) {
+    const client = await this.prisma.client.findUnique({ where: { id } });
+    if (!client) throw new NotFoundException('Cliente no encontrado');
+    
+    return {
+      success: true,
+      data: client,
+    };
   }
 
   async updateClient(id: number, data: Prisma.ClientUpdateInput) {
     const exists = await this.prisma.client.findUnique({ where: { id } });
     if (!exists) throw new NotFoundException('Cliente no encontrado');
-    return this.prisma.client.update({ where: { id }, data });
+    
+    const client = await this.prisma.client.update({ where: { id }, data });
+    return {
+      success: true,
+      data: client,
+    };
   }
 
   async deleteClient(id: number) {
     const exists = await this.prisma.client.findUnique({ where: { id } });
     if (!exists) throw new NotFoundException('Cliente no encontrado');
-    return this.prisma.client.delete({ where: { id } });
+    
+    await this.prisma.client.delete({ where: { id } });
+    return {
+      success: true,
+      message: 'Cliente eliminado exitosamente',
+    };
   }
 }

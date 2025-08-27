@@ -83,4 +83,21 @@ export class SupplierController {
   ) {
     return this.supplierService.updateDebt(+id, body.amount, body.operation);
   }
+
+  @Get('financial/summary')
+  getFinancialSummary() {
+    return this.supplierService.getFinancialSummary();
+  }
+
+  @Post(':id/payment')
+  registerPayment(
+    @Param('id') id: string,
+    @Body() body: { 
+      amount: number; 
+      paymentMethod: string; 
+      description?: string;
+    }
+  ) {
+    return this.supplierService.registerPayment(+id, body.amount, body.paymentMethod, body.description);
+  }
 }

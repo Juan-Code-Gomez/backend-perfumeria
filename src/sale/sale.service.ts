@@ -1,5 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { ComboService } from '../services/combo.service';
+import { SimpleCapitalService } from '../services/simple-capital.service';
 import { CreateSaleDto } from './dto/create-sale.dto';
 import { CreateSalePaymentDto } from './dto/create-sale-payment.dto';
 import { CreateCreditNoteDto } from './dto/create-credit-note.dto';
@@ -9,7 +11,11 @@ const path = require('path');
 
 @Injectable()
 export class SaleService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private comboService: ComboService,
+    private capitalService: SimpleCapitalService,
+  ) {}
 
   async create(data: CreateSaleDto) {
     let isPaid = data.isPaid ?? false;
@@ -20,7 +26,7 @@ export class SaleService {
       paidAmount = data.totalAmount;
     }
 
-    return this.prisma.$transaction(async (tx) => {
+    const sale = await this.prisma.$transaction(async (tx) => {
       // Si se proporciona clientId, validar que existe
       if (data.clientId) {
         const clientExists = await tx.client.findUnique({
@@ -94,15 +100,49 @@ export class SaleService {
       // Descontar el stock
       await Promise.all(
         data.details.map(async (d) => {
-          await tx.product.update({
+          // Verificar si el producto es un combo
+          const product = await tx.product.findUnique({
             where: { id: d.productId },
-            data: { stock: { decrement: Number(d.quantity) } },
+            select: { id: true, salesType: true, name: true }
           });
+
+          if (product?.salesType === 'COMBO') {
+            // Procesar combo: descontar ingredientes automáticamente
+            await this.comboService.processComboSale(d.productId, d.quantity, sale.id);
+            
+            // También descontar el stock del combo mismo si maneja inventario
+            await tx.product.update({
+              where: { id: d.productId },
+              data: { stock: { decrement: Number(d.quantity) } },
+            });
+          } else {
+            // Producto normal: descontar stock directamente
+            await tx.product.update({
+              where: { id: d.productId },
+              data: { stock: { decrement: Number(d.quantity) } },
+            });
+          }
         }),
       );
 
       return sale;
     });
+
+    // Registrar automáticamente en capital si la venta está pagada
+    if (sale && isPaid) {
+      try {
+        await this.capitalService.processSale(
+          sale.id, 
+          sale.totalAmount, 
+          data.paymentMethod || 'EFECTIVO'
+        );
+      } catch (error) {
+        console.error('Error registrando venta en capital:', error);
+        // No fallar la venta por error en capital
+      }
+    }
+
+    return sale;
   }
 
   async findAll({ dateFrom, dateTo }: { dateFrom?: string; dateTo?: string }) {
@@ -200,7 +240,7 @@ export class SaleService {
   }
 
   async addPayment(saleId: number, dto: CreateSalePaymentDto) {
-    return this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
       // 1. Crear el abono
       const payment = await tx.salePayment.create({
         data: {
@@ -280,6 +320,20 @@ export class SaleService {
 
       return payment;
     });
+
+    // Registrar automáticamente en capital
+    try {
+      await this.capitalService.processSale(
+        saleId, 
+        dto.amount, 
+        dto.method || 'EFECTIVO'
+      );
+    } catch (error) {
+      console.error('Error registrando abono en capital:', error);
+      // No fallar el abono por error en capital
+    }
+
+    return result;
   }
 
   async getPayments(saleId: number) {

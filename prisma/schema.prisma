@@ -24,10 +24,11 @@ model User {
 }
 
 model Role {
-  id          Int        @id @default(autoincrement())
-  name        String     @unique
+  id          Int                @id @default(autoincrement())
+  name        String             @unique
   description String?
   users       UserRole[]
+  permissions ModulePermission[]
 }
 
 model UserRole {
@@ -82,6 +83,7 @@ model Product {
   
   // Información del producto
   productType       String             @default("SIMPLE") // SIMPLE, VARIANT, COMPOSITE
+  salesType         String             @default("VENTA") // VENTA, INSUMO, COMBO
   size              String?            // "1 oz", "2 oz", "100ml", etc.
   sizeValue         Float?             // Valor numérico del tamaño
   brand             String?            // Marca del producto
@@ -522,6 +524,29 @@ model Capital {
   @@index([date])
 }
 
+// Modelo para historial de movimientos de capital
+model CapitalMovement {
+  id              Int      @id @default(autoincrement())
+  type            String   // INGRESO, EGRESO
+  amount          Float    // Monto del movimiento
+  description     String   // Descripción del movimiento
+  category        String   // VENTA, PROVEEDOR, GASTO, OTRO
+  paymentMethod   String   // EFECTIVO, TRANSFERENCIA, TARJETA
+  cashBefore      Float?   // Capital en efectivo antes del movimiento
+  bankBefore      Float?   // Capital en banco antes del movimiento
+  cashAfter       Float?   // Capital en efectivo después del movimiento
+  bankAfter       Float?   // Capital en banco después del movimiento
+  saleId          Int?     // Referencia a venta (si aplica)
+  invoiceId       Int?     // Referencia a factura (si aplica)
+  expenseId       Int?     // Referencia a gasto (si aplica)
+  date            DateTime @default(now())
+  createdAt       DateTime @default(now())
+  
+  @@index([type])
+  @@index([category])
+  @@index([date])
+}
+
 // Modelo para gestión de facturas
 model Invoice {
   id              Int      @id @default(autoincrement())
@@ -539,4 +564,79 @@ model Invoice {
   @@index([status])
   @@index([invoiceDate])
   @@index([dueDate])
+}
+
+// Configuración de la empresa
+model CompanyConfig {
+  id                    Int      @id @default(autoincrement())
+  companyName          String   // Nombre de la empresa
+  nit                  String?  // NIT de la empresa
+  address              String?  // Dirección
+  phone                String?  // Teléfono
+  email                String?  // Email
+  website              String?  // Sitio web
+  logo                 String?  // URL del logo
+  
+  // Configuración de facturación
+  invoicePrefix        String?  // Prefijo de facturas (ej: "FACT-")
+  invoiceFooter        String?  // Pie de página de facturas
+  taxRate              Float?   @default(0) // Tasa de impuesto por defecto
+  currency             String   @default("COP") // Moneda
+  
+  // Configuración POS
+  posReceiptHeader     String?  // Encabezado del recibo POS
+  posReceiptFooter     String?  // Pie de página del recibo POS
+  printLogo            Boolean  @default(false) // Imprimir logo en recibos
+  
+  // Configuración del sistema
+  timezone             String   @default("America/Bogota") // Zona horaria
+  dateFormat           String   @default("DD/MM/YYYY") // Formato de fecha
+  numberFormat         String   @default("es-CO") // Formato de números
+  
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+  
+  @@map("company_config")
+}
+
+// Módulos del sistema
+model SystemModule {
+  id            Int                 @id @default(autoincrement())
+  name          String              @unique // Nombre del módulo (ej: "products", "sales")
+  displayName   String              // Nombre para mostrar
+  description   String?             // Descripción del módulo
+  route         String?             // Ruta del módulo
+  icon          String?             // Icono del módulo
+  isActive      Boolean             @default(true)
+  order         Int                 @default(0) // Orden en el menú
+  parentId      Int?                // Para módulos anidados
+  parent        SystemModule?       @relation("ModuleHierarchy", fields: [parentId], references: [id])
+  children      SystemModule[]      @relation("ModuleHierarchy")
+  permissions   ModulePermission[]
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+  
+  @@map("system_modules")
+}
+
+// Permisos de módulos por rol
+model ModulePermission {
+  id            Int                 @id @default(autoincrement())
+  moduleId      Int
+  roleId        Int
+  canView       Boolean             @default(false) // Puede ver el módulo
+  canCreate     Boolean             @default(false) // Puede crear registros
+  canEdit       Boolean             @default(false) // Puede editar registros
+  canDelete     Boolean             @default(false) // Puede eliminar registros
+  canExport     Boolean             @default(false) // Puede exportar datos
+  customData    Json?               // Permisos personalizados en formato JSON
+  
+  module        SystemModule        @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  role          Role                @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+  
+  @@unique([moduleId, roleId])
+  @@map("module_permissions")
 }

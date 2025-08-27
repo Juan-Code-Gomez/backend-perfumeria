@@ -25,6 +25,8 @@ import { SecurityModule } from './security/security.module';
 import { ReportsModule } from './reports/reports.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { InventoryAutomationModule } from './inventory-automation/inventory-automation.module';
+import { CompanyConfigModule } from './company-config/company-config.module';
+import { PermissionsModule } from './permissions/permissions.module';
 
 @Module({
   imports: [
@@ -52,6 +54,8 @@ import { InventoryAutomationModule } from './inventory-automation/inventory-auto
     ReportsModule,
     NotificationsModule,
     InventoryAutomationModule,
+    CompanyConfigModule,
+    PermissionsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

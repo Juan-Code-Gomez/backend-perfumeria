@@ -1,43 +1,66 @@
 // prisma/seed.ts
 import { PrismaClient } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
+import { seedModules, seedRoles, seedPermissions } from './seed-modules';
 
 const prisma = new PrismaClient();
 
 async function main() {
-  // Limpia todas las tablas (opcional si usas migrate reset)
-  // await prisma.userRole.deleteMany();
-  // await prisma.user.deleteMany();
-  // await prisma.role.deleteMany();
+  console.log('🌱 Starting database seeding...');
 
-  // 1. Crea los roles base
-  const adminRole = await prisma.role.upsert({
-    where: { name: 'ADMIN' },
-    update: {},
-    create: { name: 'ADMIN', description: 'Administrador total' },
-  });
-  const userRole = await prisma.role.upsert({
-    where: { name: 'USER' },
-    update: {},
-    create: { name: 'USER', description: 'Usuario estándar' },
+  // 1. Seed modules and roles first
+  await seedModules();
+  await seedRoles();
+  await seedPermissions();
+
+  // 2. Crea el usuario super admin
+  const superAdminRole = await prisma.role.findUnique({
+    where: { name: 'SUPER_ADMIN' }
   });
 
-  // 2. Crea el usuario admin solo si no existe
-  const password = await bcrypt.hash('admin123', 10); // ¡Cámbialo luego!
-  const admin = await prisma.user.upsert({
-    where: { username: 'admin' },
+  if (!superAdminRole) {
+    throw new Error('SUPER_ADMIN role not found');
+  }
+
+  // 2. Crea el usuario super admin
+  const password = await bcrypt.hash('superadmin123', 10); // ¡Cámbialo luego!
+  const superAdmin = await prisma.user.upsert({
+    where: { username: 'superadmin' },
     update: {},
     create: {
-      username: 'admin',
+      username: 'superadmin',
       password,
-      name: 'Administrador',
+      name: 'Super Administrador',
       roles: {
-        create: [{ roleId: adminRole.id }]
+        create: [{ roleId: superAdminRole.id }]
       }
     },
   });
 
-  console.log('Seed ejecutado: roles y usuario admin creados');
+  // 3. Crear usuario admin del cliente
+  const adminRole = await prisma.role.findUnique({
+    where: { name: 'ADMIN' }
+  });
+
+  if (adminRole) {
+    const adminPassword = await bcrypt.hash('admin123', 10);
+    const admin = await prisma.user.upsert({
+      where: { username: 'admin' },
+      update: {},
+      create: {
+        username: 'admin',
+        password: adminPassword,
+        name: 'Administrador Cliente',
+        roles: {
+          create: [{ roleId: adminRole.id }]
+        }
+      },
+    });
+  }
+
+  console.log('🎉 Database seeding completed successfully!');
+  console.log('👤 Super Admin: superadmin / superadmin123');
+  console.log('👤 Client Admin: admin / admin123');
 }
 
 main()

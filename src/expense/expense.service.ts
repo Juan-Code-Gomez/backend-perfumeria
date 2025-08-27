@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { CapitalAutoService } from '../services/capital-auto.service';
 import { CreateExpenseDto, UpdateExpenseDto } from './dto/create-expense.dto';
 import { ExpenseCategory } from '@prisma/client';
 
@@ -21,7 +22,10 @@ interface SummaryOpts {
 
 @Injectable()
 export class ExpenseService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private capitalAutoService: CapitalAutoService,
+  ) {}
 
   async create(dto: CreateExpenseDto) {
     // Crear fecha local sin interpretación UTC
@@ -34,7 +38,7 @@ export class ExpenseService {
       date = new Date();
     }
     
-    return this.prisma.expense.create({
+    const expense = await this.prisma.expense.create({
       data: {
         date: date,
         amount: dto.amount,
@@ -44,6 +48,21 @@ export class ExpenseService {
         notes: dto.notes,
       },
     });
+
+    // Registrar automáticamente en capital
+    try {
+      await this.capitalAutoService.processExpense(
+        expense.id,
+        expense.amount,
+        expense.paymentMethod || 'EFECTIVO',
+        expense.description
+      );
+    } catch (error) {
+      console.error('Error registrando gasto en capital:', error);
+      // No fallar la creación del gasto por error en capital
+    }
+
+    return expense;
   }
 
   async findAll(opts: FindAllOpts) {
