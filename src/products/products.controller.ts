@@ -87,7 +87,6 @@ export class ProductsController {
   }
 
   @Post('bulk-upload')
-  @Roles('ADMIN')
   @UseInterceptors(
     FileInterceptor('file', {
       limits: { fileSize: 2 * 1024 * 1024 }, // 2 MB (ajusta si quieres)
