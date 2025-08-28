@@ -581,9 +581,22 @@ export class ProductsService {
         // Validar precios y stock
         const stockToAdd = Number(row['Stock inicial']);
         const precioCompra = Number(row['Precio compra']);
-        let precioVenta = Number(row['Precio venta']) || 0;
-
-        // *** CÁLCULO AUTOMÁTICO DE PRECIO DE VENTA ***
+        
+        // *** MANEJO INTELIGENTE DEL PRECIO DE VENTA ***
+        let precioVenta = 0;
+        const precioVentaExcel = row['Precio venta'];
+        
+        // Verificar si el Excel tiene un precio de venta específico
+        if (precioVentaExcel !== undefined && precioVentaExcel !== null && precioVentaExcel !== '') {
+          const precioVentaNumerico = Number(precioVentaExcel);
+          if (!isNaN(precioVentaNumerico) && precioVentaNumerico > 0) {
+            // Usar el precio de venta del Excel
+            precioVenta = precioVentaNumerico;
+            console.log(`💰 Usando precio de venta del Excel para "${row['Nombre producto']}": $${precioVenta}`);
+          }
+        }
+        
+        // Si no hay precio de venta en el Excel o es inválido, calcular automáticamente
         if (precioVenta <= 0 && precioCompra > 0) {
           // Si es categoría "Perfumes 1.1", aplicar 80% de rentabilidad
           if (categoria.name.toLowerCase().includes('perfumes 1.1')) {
@@ -746,9 +759,22 @@ export class ProductsService {
       // Validar precios y stock
       const stockToAdd = Number(row['Stock inicial']) || 0;
       const precioCompra = Number(row['Precio compra']) || 0;
-      let precioVenta = Number(row['Precio venta']) || 0;
-
-      // *** CÁLCULO AUTOMÁTICO DE PRECIO DE VENTA ***
+      
+      // *** MANEJO INTELIGENTE DEL PRECIO DE VENTA ***
+      let precioVenta = 0;
+      const precioVentaExcel = row['Precio venta'];
+      
+      // Verificar si el Excel tiene un precio de venta específico
+      if (precioVentaExcel !== undefined && precioVentaExcel !== null && precioVentaExcel !== '') {
+        const precioVentaNumerico = Number(precioVentaExcel);
+        if (!isNaN(precioVentaNumerico) && precioVentaNumerico > 0) {
+          // Usar el precio de venta del Excel
+          precioVenta = precioVentaNumerico;
+          console.log(`💰 Usando precio de venta del Excel para "${row['Nombre producto']}": $${precioVenta}`);
+        }
+      }
+      
+      // Si no hay precio de venta en el Excel o es inválido, calcular automáticamente
       if (precioVenta <= 0 && precioCompra > 0) {
         // Si es categoría "Perfumes 1.1", aplicar 80% de rentabilidad
         if (categoria.name.toLowerCase().includes('perfumes 1.1')) {
