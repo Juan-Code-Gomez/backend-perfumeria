@@ -19,7 +19,7 @@
     "deploy": "prisma generate && prisma migrate deploy && npm run build",
     "postdeploy": "prisma db seed",
     "railway:build": "prisma generate && npm run build",
-    "railway:start": "prisma migrate deploy && node dist/src/main.js",
+    "railway:start": "node baseline-migrations.js && node dist/src/main.js",
     "railway:start:production": "prisma migrate deploy && node dist/src/main.js",
     "reset:db": "prisma db push --force-reset && prisma db seed",
     "seed": "prisma db seed",
