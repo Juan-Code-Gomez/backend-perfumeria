@@ -24,7 +24,7 @@ async function bootstrap() {
     new LoggingInterceptor(),
     new TransformInterceptor(),
   );
-  //hola
+  //hola x2
   // CORS configuration
   app.enableCors({
     origin: [
