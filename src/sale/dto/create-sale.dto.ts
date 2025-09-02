@@ -1,4 +1,4 @@
-import { IsOptional, IsNumber, IsString, IsBoolean, IsArray, ValidateNested } from 'class-validator';
+import { IsOptional, IsNumber, IsString, IsBoolean, IsArray, ValidateNested, IsObject } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class CreateSaleDetailDto {
@@ -21,6 +21,18 @@ export class CreateSaleDetailDto {
   @IsOptional()
   @IsNumber()
   suggestedPrice?: number;  // Opcional - precio sugerido original
+}
+
+export class CreateSalePaymentDto {
+  @IsNumber()
+  amount: number;
+
+  @IsString()
+  method: string;
+
+  @IsOptional()
+  @IsString()
+  note?: string;
 }
 
 export class CreateSaleDto {
@@ -48,7 +60,13 @@ export class CreateSaleDto {
 
   @IsOptional()
   @IsString()
-  paymentMethod?: string;
+  paymentMethod?: string; // Mantener para compatibilidad hacia atrás
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => CreateSalePaymentDto)
+  payments?: CreateSalePaymentDto[]; // Nuevo: múltiples métodos de pago
 
   @IsArray()
   @ValidateNested({ each: true })

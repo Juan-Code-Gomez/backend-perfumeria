@@ -1,5 +1,6 @@
-import { IsString, IsOptional, IsBoolean, IsNumber, IsEmail, IsIn, IsArray, Length, Min, Max } from 'class-validator';
+import { IsString, IsOptional, IsBoolean, IsNumber, IsEmail, IsIn, IsArray, Length, Min, Max, IsEnum } from 'class-validator';
 import { Transform, Type } from 'class-transformer';
+import { SupplierType } from '../enums/supplier-types.enum';
 
 export class CreateSupplierDto {
   @IsString({ message: 'El nombre debe ser un texto' })
@@ -54,11 +55,10 @@ export class CreateSupplierDto {
   creditLimit?: number;
 
   @IsOptional()
-  @IsString({ message: 'El tipo de proveedor debe ser un texto' })
-  @IsIn(['ESENCIAS', 'FRASCOS', 'ORIGINALES', 'LOCIONES', 'CREMAS', 'MIXTO'], { 
-    message: 'El tipo debe ser: ESENCIAS, FRASCOS, ORIGINALES, LOCIONES, CREMAS o MIXTO' 
+  @IsEnum(SupplierType, { 
+    message: 'El tipo debe ser: ESENCIAS, FRASCOS, ORIGINALES, LOCIONES, CREMAS, MIXTO, DISTRIBUIDOR, FABRICANTE, IMPORTADOR o LOCAL' 
   })
-  supplierType?: string;
+  supplierType?: SupplierType;
 
   @IsOptional()
   @IsArray({ message: 'Las categorías especializadas deben ser un array' })

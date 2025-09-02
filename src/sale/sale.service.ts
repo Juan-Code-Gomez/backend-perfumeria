@@ -18,6 +18,8 @@ export class SaleService {
   ) {}
 
   async create(data: CreateSaleDto) {
+    console.log('📝 Sale service - Datos recibidos:', JSON.stringify(data, null, 2));
+    
     let isPaid = data.isPaid ?? false;
     let paidAmount = Number(data.paidAmount) || 0;
 
@@ -87,7 +89,7 @@ export class SaleService {
           totalAmount: data.totalAmount,
           paidAmount: paidAmount,
           isPaid,
-          paymentMethod: data.paymentMethod,
+          paymentMethod: data.paymentMethod, // Mantener para compatibilidad
           details: {
             create: detailsWithProfit,
           },
@@ -96,6 +98,41 @@ export class SaleService {
           details: { include: { product: true } },
         },
       });
+
+      // Crear múltiples pagos si se proporcionan
+      if (data.payments && data.payments.length > 0) {
+        // Validar que la suma de pagos coincida con el monto pagado
+        const totalPayments = data.payments.reduce((sum, payment) => sum + payment.amount, 0);
+        
+        if (Math.abs(totalPayments - paidAmount) > 0.01) {
+          throw new Error(`La suma de los pagos ($${totalPayments}) no coincide con el monto pagado ($${paidAmount})`);
+        }
+
+        // Crear registros de pago
+        await Promise.all(
+          data.payments.map(payment => 
+            tx.salePayment.create({
+              data: {
+                saleId: sale.id,
+                amount: payment.amount,
+                method: payment.method,
+                note: payment.note,
+                date: new Date(),
+              }
+            })
+          )
+        );
+      } else if (data.paymentMethod && paidAmount > 0) {
+        // Compatibilidad hacia atrás: crear un solo pago con el método tradicional
+        await tx.salePayment.create({
+          data: {
+            saleId: sale.id,
+            amount: paidAmount,
+            method: data.paymentMethod,
+            date: new Date(),
+          }
+        });
+      }
 
       // Descontar el stock
       await Promise.all(
@@ -131,11 +168,23 @@ export class SaleService {
     // Registrar automáticamente en capital si la venta está pagada
     if (sale && isPaid) {
       try {
-        await this.capitalService.processSale(
-          sale.id, 
-          sale.totalAmount, 
-          data.paymentMethod || 'EFECTIVO'
-        );
+        // Si hay múltiples pagos, registrar cada uno por separado en capital
+        if (data.payments && data.payments.length > 0) {
+          for (const payment of data.payments) {
+            await this.capitalService.processSale(
+              sale.id, 
+              payment.amount, 
+              payment.method
+            );
+          }
+        } else {
+          // Compatibilidad hacia atrás con un solo método de pago
+          await this.capitalService.processSale(
+            sale.id, 
+            sale.totalAmount, 
+            data.paymentMethod || 'EFECTIVO'
+          );
+        }
       } catch (error) {
         console.error('Error registrando venta en capital:', error);
         // No fallar la venta por error en capital

@@ -22,6 +22,7 @@ export class SaleController {
 
   @Post()
   async create(@Body() createSaleDto: CreateSaleDto) {
+    console.log('🎯 Sale controller - Datos recibidos:', JSON.stringify(createSaleDto, null, 2));
     return this.saleService.create(createSaleDto);
   }
 

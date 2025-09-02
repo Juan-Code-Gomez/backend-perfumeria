@@ -544,4 +544,151 @@ export class SupplierService {
       };
     });
   }
+
+  // Obtener categorías de proveedores
+  async getSupplierCategories() {
+    const suppliers = await this.prisma.supplier.findMany({
+      where: { isActive: true },
+      select: {
+        supplierType: true,
+        specializedCategories: true,
+      },
+    });
+
+    const typeStats = suppliers.reduce((acc, supplier) => {
+      if (supplier.supplierType) {
+        acc[supplier.supplierType] = (acc[supplier.supplierType] || 0) + 1;
+      }
+      return acc;
+    }, {} as Record<string, number>);
+
+    const categoryStats = suppliers.reduce((acc, supplier) => {
+      if (supplier.specializedCategories && supplier.specializedCategories.length > 0) {
+        supplier.specializedCategories.forEach(category => {
+          acc[category] = (acc[category] || 0) + 1;
+        });
+      }
+      return acc;
+    }, {} as Record<string, number>);
+
+    return {
+      types: Object.entries(typeStats).map(([type, count]) => ({ type, count })),
+      categories: Object.entries(categoryStats).map(([category, count]) => ({ category, count })),
+    };
+  }
+
+  // Obtener performance de proveedores
+  async getSupplierPerformance() {
+    const suppliers = await this.prisma.supplier.findMany({
+      where: { isActive: true },
+      include: {
+        purchases: {
+          where: {
+            date: {
+              gte: new Date(new Date().setMonth(new Date().getMonth() - 6)), // Últimos 6 meses
+            },
+          },
+        },
+        _count: {
+          select: {
+            purchases: true,
+          },
+        },
+      },
+    });
+
+    const performance = suppliers.map(supplier => {
+      const totalPurchases = supplier.purchases.reduce((sum, purchase) => sum + purchase.totalAmount, 0);
+      const averageOrderValue = supplier.purchases.length > 0 ? totalPurchases / supplier.purchases.length : 0;
+      const onTimeDeliveryRate = supplier.leadTimeDays ? Math.max(0, 100 - (supplier.leadTimeDays - 7) * 5) : 85; // Simulado
+      
+      return {
+        id: supplier.id,
+        name: supplier.name,
+        supplierType: supplier.supplierType,
+        totalPurchases,
+        purchaseCount: supplier.purchases.length,
+        averageOrderValue,
+        rating: supplier.rating || 0,
+        onTimeDeliveryRate,
+        creditLimit: supplier.creditLimit || 0,
+        currentDebt: supplier.currentDebt || 0,
+        debtRatio: supplier.creditLimit ? (supplier.currentDebt || 0) / supplier.creditLimit : 0,
+      };
+    });
+
+    return performance.sort((a, b) => b.totalPurchases - a.totalPurchases);
+  }
+
+  async getAnalytics() {
+    const suppliers = await this.prisma.supplier.findMany({
+      include: {
+        purchases: {
+          select: {
+            totalAmount: true,
+          },
+        },
+      },
+    });
+
+    const totalSuppliers = suppliers.length;
+    const activeSuppliers = suppliers.filter(s => s.isActive).length;
+    const preferredSuppliers = suppliers.filter(s => s.isPreferred).length;
+    const suppliersWithDebt = suppliers.filter(s => (s.currentDebt || 0) > 0).length;
+    
+    const totalDebt = suppliers.reduce((sum, s) => sum + (s.currentDebt || 0), 0);
+    const totalCreditLimit = suppliers.reduce((sum, s) => sum + (s.creditLimit || 0), 0);
+    
+    // Distribución por tipo
+    const typeDistribution = suppliers.reduce((acc, supplier) => {
+      const type = supplier.supplierType || 'Sin clasificar';
+      acc[type] = (acc[type] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+
+    // Top deudores
+    const topDebtors = suppliers
+      .filter(s => (s.currentDebt || 0) > 0)
+      .sort((a, b) => (b.currentDebt || 0) - (a.currentDebt || 0))
+      .slice(0, 5)
+      .map(supplier => ({
+        id: supplier.id,
+        name: supplier.name,
+        currentDebt: supplier.currentDebt || 0,
+        creditLimit: supplier.creditLimit,
+        debtPercentage: supplier.creditLimit 
+          ? ((supplier.currentDebt || 0) / supplier.creditLimit) * 100 
+          : 0,
+      }));
+
+    // Métricas de eficiencia
+    const activePercentage = totalSuppliers > 0 ? (activeSuppliers / totalSuppliers) * 100 : 0;
+    const preferredPercentage = totalSuppliers > 0 ? (preferredSuppliers / totalSuppliers) * 100 : 0;
+    const creditUtilization = totalCreditLimit > 0 ? (totalDebt / totalCreditLimit) * 100 : 0;
+    
+    // Nivel de riesgo
+    let riskLevel: 'LOW' | 'MEDIUM' | 'HIGH' = 'LOW';
+    if (creditUtilization > 80 || suppliersWithDebt > totalSuppliers * 0.5) {
+      riskLevel = 'HIGH';
+    } else if (creditUtilization > 50 || suppliersWithDebt > totalSuppliers * 0.3) {
+      riskLevel = 'MEDIUM';
+    }
+
+    return {
+      totalSuppliers,
+      activeSuppliers,
+      preferredSuppliers,
+      suppliersWithDebt,
+      totalDebt,
+      totalCreditLimit,
+      typeDistribution,
+      topDebtors,
+      metrics: {
+        activePercentage,
+        preferredPercentage,
+        creditUtilization,
+        riskLevel,
+      },
+    };
+  }
 }

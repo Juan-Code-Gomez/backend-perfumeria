@@ -41,6 +41,16 @@ export class SupplierController {
     return this.supplierService.getStatistics();
   }
 
+  @Get('categories')
+  getSupplierCategories() {
+    return this.supplierService.getSupplierCategories();
+  }
+
+  @Get('performance')
+  getSupplierPerformance() {
+    return this.supplierService.getSupplierPerformance();
+  }
+
   @Get('by-type/:type')
   getSuppliersByType(@Param('type') type: string) {
     return this.supplierService.getSuppliersByType(type);
@@ -99,5 +109,10 @@ export class SupplierController {
     }
   ) {
     return this.supplierService.registerPayment(+id, body.amount, body.paymentMethod, body.description);
+  }
+
+  @Get('analytics')
+  getAnalytics() {
+    return this.supplierService.getAnalytics();
   }
 }
