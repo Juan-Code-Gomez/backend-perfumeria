@@ -170,6 +170,10 @@ export async function seedRoles() {
       description: 'Empleado con acceso limitado a ventas y consultas'
     },
     {
+      name: 'VENDEDOR',
+      description: 'Vendedor/Cajero con acceso a POS, ventas, productos (solo lectura) sin información de costos'
+    },
+    {
       name: 'VIEWER',
       description: 'Solo lectura de información básica'
     }
@@ -196,6 +200,7 @@ export async function seedPermissions() {
   const admin = roles.find(r => r.name === 'ADMIN');
   const manager = roles.find(r => r.name === 'MANAGER');
   const employee = roles.find(r => r.name === 'EMPLOYEE');
+  const vendedor = roles.find(r => r.name === 'VENDEDOR');
   const viewer = roles.find(r => r.name === 'VIEWER');
 
   // SUPER_ADMIN - Acceso total incluyendo administración del sistema
@@ -322,6 +327,81 @@ export async function seedPermissions() {
         create: {
           moduleId: module.id,
           roleId: employee.id,
+          ...permissions,
+        },
+      });
+    }
+  }
+
+  // VENDEDOR - Acceso a POS, ventas, productos (solo lectura), gastos (solo crear), cierres de caja y facturas (solo crear)
+  if (vendedor) {
+    const vendedorModules = modules.filter(m => 
+      ['pos', 'ventas', 'productos', 'gastos', 'cierres-caja', 'facturas'].includes(m.name)
+    );
+    
+    for (const module of vendedorModules) {
+      let permissions;
+      
+      switch (module.name) {
+        case 'pos':
+        case 'ventas':
+          permissions = {
+            canView: true,
+            canCreate: true, // Puede crear ventas en POS y módulo de ventas
+            canEdit: false,
+            canDelete: false,
+            canExport: false,
+          };
+          break;
+        case 'productos':
+          permissions = {
+            canView: true,
+            canCreate: false, // Solo lectura de productos
+            canEdit: false,
+            canDelete: false,
+            canExport: false,
+          };
+          break;
+        case 'gastos':
+        case 'facturas':
+          permissions = {
+            canView: true,
+            canCreate: true, // Solo puede crear gastos y facturas
+            canEdit: false, // No puede editar
+            canDelete: false, // No puede eliminar
+            canExport: false,
+          };
+          break;
+        case 'cierres-caja':
+          permissions = {
+            canView: true,
+            canCreate: true, // Puede crear cierres de caja
+            canEdit: true, // Puede editar cierres de caja
+            canDelete: false, // No puede eliminar
+            canExport: false,
+          };
+          break;
+        default:
+          permissions = {
+            canView: true,
+            canCreate: false,
+            canEdit: false,
+            canDelete: false,
+            canExport: false,
+          };
+      }
+
+      await prisma.modulePermission.upsert({
+        where: { 
+          moduleId_roleId: { 
+            moduleId: module.id, 
+            roleId: vendedor.id 
+          } 
+        },
+        update: permissions,
+        create: {
+          moduleId: module.id,
+          roleId: vendedor.id,
           ...permissions,
         },
       });

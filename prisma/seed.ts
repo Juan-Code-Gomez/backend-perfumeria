@@ -58,9 +58,32 @@ async function main() {
     });
   }
 
+  // 4. Crear usuario vendedor para producción
+  const vendedorRole = await prisma.role.findUnique({
+    where: { name: 'VENDEDOR' }
+  });
+
+  if (vendedorRole) {
+    const vendedorPassword = await bcrypt.hash('vendedor2024!', 10);
+    const vendedor = await prisma.user.upsert({
+      where: { username: 'vendedor' },
+      update: {},
+      create: {
+        username: 'vendedor',
+        password: vendedorPassword,
+        name: 'Vendedor Principal',
+        roles: {
+          create: [{ roleId: vendedorRole.id }]
+        }
+      },
+    });
+    console.log('👤 Vendedor: vendedor / vendedor2024!');
+  }
+
   console.log('🎉 Database seeding completed successfully!');
   console.log('👤 Super Admin: superadmin / superadmin123');
   console.log('👤 Client Admin: admin / admin123');
+  console.log('👤 Vendedor: vendedor / vendedor2024!');
 }
 
 main()
