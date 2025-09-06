@@ -8,19 +8,17 @@ datasource db {
 }
 
 model User {
-  id                        Int                      @id @default(autoincrement())
-  username                  String                   @unique
-  password                  String
-  name                      String
-  isActive                  Boolean                  @default(true)
-  roles                     UserRole[]
-  createdAt                 DateTime                 @default(now())
-  updatedAt                 DateTime                 @updatedAt
-  cashClosings              CashClosing[]            @relation("UserCashClosings")
-  
-  // FASE 3: Relaciones de notificaciones
-  notifications             Notification[]
-  notificationPreferences   NotificationPreference?  @relation("NotificationPreferences")
+  id                      Int                     @id @default(autoincrement())
+  username                String                  @unique
+  password                String
+  name                    String
+  isActive                Boolean                 @default(true)
+  createdAt               DateTime                @default(now())
+  updatedAt               DateTime                @updatedAt
+  cashClosings            CashClosing[]           @relation("UserCashClosings")
+  notifications           Notification[]
+  notificationPreferences NotificationPreference? @relation("NotificationPreferences")
+  roles                   UserRole[]
 }
 
 model Role {
@@ -32,10 +30,10 @@ model Role {
 }
 
 model UserRole {
-  user   User @relation(fields: [userId], references: [id])
   userId Int
-  role   Role @relation(fields: [roleId], references: [id])
   roleId Int
+  role   Role @relation(fields: [roleId], references: [id])
+  user   User @relation(fields: [userId], references: [id])
 
   @@id([userId, roleId])
 }
@@ -43,95 +41,76 @@ model UserRole {
 model Category {
   id          Int       @id @default(autoincrement())
   name        String    @unique
+  createdAt   DateTime  @default(now())
   description String?
   isActive    Boolean   @default(true)
-  color       String?   // Color para UI
-  icon        String?   // Icono para UI
-  products    Product[]
-  createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
+  color       String?
+  icon        String?
+  products    Product[]
 }
 
 model Unit {
   id          Int       @id @default(autoincrement())
   name        String    @unique
-  symbol      String?   // Símbolo de la unidad (ml, g, und, etc.)
-  description String?   // Descripción de la unidad
-  unitType    String?   // Tipo: VOLUME, WEIGHT, QUANTITY, etc.
-  isActive    Boolean   @default(true)
-  isDecimal   Boolean   @default(true) // Si permite decimales
-  products    Product[]
+  symbol      String?
   createdAt   DateTime  @default(now())
+  description String?
+  isActive    Boolean   @default(true)
+  isDecimal   Boolean   @default(true)
+  unitType    String?
   updatedAt   DateTime  @updatedAt
+  products    Product[]
 }
 
 model Product {
-  id                Int                @id @default(autoincrement())
-  name              String
-  description       String?
-  
-  // Identificación y códigos
-  sku               String?            @unique
-  barcode           String?
-  fragranceName     String?            // Nombre de la fragancia (para agrupar esencias y perfumes 1.1)
-  
-  // Categorización y relaciones básicas
-  categoryId        Int
-  category          Category           @relation(fields: [categoryId], references: [id])
-  unitId            Int
-  unit              Unit               @relation(fields: [unitId], references: [id])
-  
-  // Información del producto
-  productType       String             @default("SIMPLE") // SIMPLE, VARIANT, COMPOSITE
-  salesType         String             @default("VENTA") // VENTA, INSUMO, COMBO
-  size              String?            // "1 oz", "2 oz", "100ml", etc.
-  sizeValue         Float?             // Valor numérico del tamaño
-  brand             String?            // Marca del producto
-  gender            String?            // MASCULINO, FEMENINO, UNISEX
-  
-  // Variantes y productos padre/hijo
-  hasVariants       Boolean            @default(false)
-  parentProductId   Int?               // Para variantes (esencia vs perfume 1.1)
-  parentProduct     Product?           @relation("ProductVariants", fields: [parentProductId], references: [id])
-  variants          Product[]          @relation("ProductVariants")
-  variantType       String?            // ESENCIA, PERFUME_11, SPLASH, etc.
-  
-  // Productos compuestos (esencia + frasco + accesorios)
-  isComposite       Boolean            @default(false)
-  requiresPreparation Boolean          @default(false) // Para esencias que se preparan
-  components        ProductComponent[] @relation("ProductComponents")
-  usedInProducts    ProductComponent[] @relation("ComponentProducts")
-  
-  // Inventario
-  stock             Float
-  minStock          Float?
-  
-  // Precios
-  purchasePrice     Float
-  salePrice         Float              // Precio base
-  suggestedPrice    Float?             // Precio sugerido
-  minPrice          Float?             // Precio mínimo
-  maxPrice          Float?             // Precio máximo
-  priceHistory      ProductPrice[]
-  
-  // Proveedor
-  supplierId        Int?
-  supplier          Supplier?          @relation(fields: [supplierId], references: [id])
-  supplierCode      String?            // Código del producto en el proveedor
-  
-  // Metadatos
-  imageUrl          String?
-  notes             String?
-  tags              String[]           // Tags para búsqueda
-  isActive          Boolean            @default(true)
-  createdAt         DateTime           @default(now())
-  updatedAt         DateTime           @updatedAt
-  
-  // Relaciones existentes
-  ProductMovement   ProductMovement[]
-  PurchaseDetail    PurchaseDetail[]
-  SaleDetail        SaleDetail[]
-  creditNoteDetails CreditNoteDetail[]
+  id                  Int                @id @default(autoincrement())
+  name                String
+  description         String?
+  categoryId          Int
+  unitId              Int
+  stock               Float
+  minStock            Float?
+  purchasePrice       Float
+  salePrice           Float
+  imageUrl            String?
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+  isActive            Boolean            @default(true)
+  barcode             String?
+  brand               String?
+  fragranceName       String?
+  gender              String?
+  hasVariants         Boolean            @default(false)
+  isComposite         Boolean            @default(false)
+  maxPrice            Float?
+  minPrice            Float?
+  notes               String?
+  parentProductId     Int?
+  productType         String             @default("SIMPLE")
+  requiresPreparation Boolean            @default(false)
+  size                String?
+  sizeValue           Float?
+  sku                 String?            @unique
+  suggestedPrice      Float?
+  supplierCode        String?
+  supplierId          Int?
+  tags                String[]
+  variantType         String?
+  salesType           String             @default("VENTA")
+  creditNoteDetails   CreditNoteDetail[]
+  InvoiceItem         InvoiceItem[]
+  category            Category           @relation(fields: [categoryId], references: [id])
+  parentProduct       Product?           @relation("ProductVariants", fields: [parentProductId], references: [id])
+  variants            Product[]          @relation("ProductVariants")
+  supplier            Supplier?          @relation(fields: [supplierId], references: [id])
+  unit                Unit               @relation(fields: [unitId], references: [id])
+  usedInProducts      ProductComponent[] @relation("ComponentProducts")
+  components          ProductComponent[] @relation("ProductComponents")
+  ProductMovement     ProductMovement[]
+  priceHistory        ProductPrice[]
+  PurchaseDetail      PurchaseDetail[]
+  SaleDetail          SaleDetail[]
 
   @@index([sku])
   @@index([barcode])
@@ -144,73 +123,63 @@ model Product {
 }
 
 model Supplier {
-  id                Int        @id @default(autoincrement())
-  name              String
-  nit               String     @unique
-  phone             String?
-  email             String?
-  address           String?
-  contactPerson     String?    // Persona de contacto
-  website           String?    // Sitio web del proveedor
-  
-  // Información comercial
-  paymentTerms      String?    // "CONTADO", "30_DIAS", "45_DIAS", "60_DIAS"
-  creditLimit       Float?     // Límite de crédito
-  currentDebt       Float      @default(0) // Deuda actual
-  supplierType      String?    // "ESENCIAS", "FRASCOS", "ORIGINALES", "MIXTO"
-  
-  // Categorías que maneja este proveedor
-  specializedCategories String[] // Array de IDs o nombres de categorías
-  
-  // Estado y configuración
-  isActive          Boolean    @default(true)
-  isPreferred       Boolean   @default(false) // Proveedor preferido
-  minOrderAmount    Float?     // Monto mínimo de pedido
-  leadTimeDays      Int?       // Días de entrega
-  
-  // Calificación y notas
-  rating            Float?     // Calificación de 1 a 5
-  notes             String?    // Notas adicionales
-  
-  purchases         Purchase[]
-  products          Product[]  // Productos de este proveedor
-  productPrices     ProductPrice[] // Historial de precios
-  createdAt         DateTime   @default(now())
-  updatedAt         DateTime   @updatedAt
+  id                    Int            @id @default(autoincrement())
+  name                  String
+  nit                   String         @unique
+  phone                 String?
+  email                 String?
+  address               String?
+  createdAt             DateTime       @default(now())
+  updatedAt             DateTime       @updatedAt
+  contactPerson         String?
+  creditLimit           Float?
+  currentDebt           Float          @default(0)
+  isActive              Boolean        @default(true)
+  isPreferred           Boolean        @default(false)
+  leadTimeDays          Int?
+  minOrderAmount        Float?
+  notes                 String?
+  paymentTerms          String?
+  rating                Float?
+  specializedCategories String[]
+  supplierType          String?
+  website               String?
+  Invoice               Invoice[]
+  products              Product[]
+  productPrices         ProductPrice[]
+  purchases             Purchase[]
 }
 
-// Modelo para componentes de productos compuestos
 model ProductComponent {
-  id                  Int      @id @default(autoincrement())
-  productId           Int      // Producto principal (compuesto)
-  product             Product  @relation("ProductComponents", fields: [productId], references: [id], onDelete: Cascade)
-  componentProductId  Int      // Producto componente
-  componentProduct    Product  @relation("ComponentProducts", fields: [componentProductId], references: [id], onDelete: Cascade)
-  quantity            Float    @default(1) // Cantidad del componente necesaria
-  isOptional          Boolean  @default(false) // Si es opcional
-  notes               String?  // Notas específicas del componente
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
+  id                 Int      @id @default(autoincrement())
+  productId          Int
+  componentProductId Int
+  quantity           Float    @default(1)
+  isOptional         Boolean  @default(false)
+  notes              String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  componentProduct   Product  @relation("ComponentProducts", fields: [componentProductId], references: [id], onDelete: Cascade)
+  product            Product  @relation("ProductComponents", fields: [productId], references: [id], onDelete: Cascade)
 
   @@unique([productId, componentProductId])
   @@index([productId])
   @@index([componentProductId])
 }
 
-// Modelo para historial de precios
 model ProductPrice {
-  id              Int       @id @default(autoincrement())
-  productId       Int
-  product         Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
-  purchasePrice   Float?    // Precio de compra
-  salePrice       Float?    // Precio de venta
-  suggestedPrice  Float?    // Precio sugerido
-  supplierId      Int?      // Proveedor asociado a este precio
-  supplier        Supplier? @relation(fields: [supplierId], references: [id], onDelete: SetNull)
-  effectiveDate   DateTime  @default(now()) // Fecha efectiva del precio
-  isActive        Boolean   @default(true) // Si está activo
-  notes           String?   // Notas sobre el cambio de precio
-  createdAt       DateTime  @default(now())
+  id             Int       @id @default(autoincrement())
+  productId      Int
+  purchasePrice  Float?
+  salePrice      Float?
+  suggestedPrice Float?
+  supplierId     Int?
+  effectiveDate  DateTime  @default(now())
+  isActive       Boolean   @default(true)
+  notes          String?
+  createdAt      DateTime  @default(now())
+  product        Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+  supplier       Supplier? @relation(fields: [supplierId], references: [id])
 
   @@index([productId])
   @@index([supplierId])
@@ -221,27 +190,27 @@ model ProductPrice {
 model Purchase {
   id          Int              @id @default(autoincrement())
   supplierId  Int
-  supplier    Supplier         @relation(fields: [supplierId], references: [id])
   date        DateTime         @default(now())
   totalAmount Float
   paidAmount  Float
   isPaid      Boolean          @default(false)
-  details     PurchaseDetail[]
   createdAt   DateTime         @default(now())
   updatedAt   DateTime         @updatedAt
+  supplier    Supplier         @relation(fields: [supplierId], references: [id])
+  details     PurchaseDetail[]
 }
 
 model PurchaseDetail {
   id         Int      @id @default(autoincrement())
   purchaseId Int
-  purchase   Purchase @relation(fields: [purchaseId], references: [id])
   productId  Int
-  product    Product  @relation(fields: [productId], references: [id])
   quantity   Float
   unitCost   Float
   totalCost  Float
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
+  product    Product  @relation(fields: [productId], references: [id])
+  purchase   Purchase @relation(fields: [purchaseId], references: [id])
 }
 
 model Client {
@@ -253,8 +222,7 @@ model Client {
   address   String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-
-  sales Sale[]
+  sales     Sale[]
 }
 
 model Sale {
@@ -263,49 +231,43 @@ model Sale {
   customerName  String?
   totalAmount   Float
   paidAmount    Float
-  clientId      Int?
-  client        Client?       @relation(fields: [clientId], references: [id])
-  paymentMethod String?
   isPaid        Boolean       @default(false)
-  details       SaleDetail[]
-  payments      SalePayment[]
-  creditNote    CreditNote? // inversa sin @relation
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
+  paymentMethod String?
+  clientId      Int?
+  creditNote    CreditNote?
+  client        Client?       @relation(fields: [clientId], references: [id])
+  details       SaleDetail[]
+  payments      SalePayment[]
 }
 
 model SaleDetail {
-  id            Int      @id @default(autoincrement())
-  saleId        Int
-  sale          Sale     @relation(fields: [saleId], references: [id])
-  productId     Int
-  product       Product  @relation(fields: [productId], references: [id])
-  quantity      Float
-  unitPrice     Float    // Precio de venta real (variable por regateo/sobreprecio)
-  totalPrice    Float    // unitPrice * quantity
-  purchasePrice Float    // Precio de compra al momento de la venta
-  profitAmount  Float    // Ganancia real = unitPrice - purchasePrice
-  profitMargin  Float    // Margen % real = (profitAmount / purchasePrice) * 100
-  suggestedPrice Float?  // Precio sugerido original del producto
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id             Int      @id @default(autoincrement())
+  saleId         Int
+  productId      Int
+  quantity       Float
+  unitPrice      Float
+  totalPrice     Float
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  profitAmount   Float
+  profitMargin   Float
+  purchasePrice  Float
+  suggestedPrice Float?
+  product        Product  @relation(fields: [productId], references: [id])
+  sale           Sale     @relation(fields: [saleId], references: [id])
 }
 
 model ProductMovement {
   id        Int          @id @default(autoincrement())
   productId Int
-  product   Product      @relation(fields: [productId], references: [id])
   type      MovementType
   quantity  Float
-  reason    String?      // Razón del movimiento
-  notes     String?      // Notas adicionales
   createdAt DateTime     @default(now())
-}
-
-enum MovementType {
-  IN
-  OUT
-  ADJUST
+  notes     String?
+  reason    String?
+  product   Product      @relation(fields: [productId], references: [id])
 }
 
 model CashClosing {
@@ -329,151 +291,280 @@ model CashClosing {
   createdBy     User?    @relation("UserCashClosings", fields: [createdById], references: [id])
 }
 
-enum ExpenseCategory {
-  SERVICIOS
-  SUMINISTROS
-  ALQUILER
-  OTRO
-}
-
 model Expense {
   id                 Int               @id @default(autoincrement())
   date               DateTime          @default(now())
   amount             Float
   description        String
-  category           ExpenseCategory
-  paymentMethod      String?
-  notes              String?
-  recurringExpenseId Int?
-  recurringExpense   RecurringExpense? @relation("RecurringExpenses", fields: [recurringExpenseId], references: [id])
-  deletedAt          DateTime?
   createdAt          DateTime          @default(now())
   updatedAt          DateTime          @updatedAt
+  deletedAt          DateTime?
+  notes              String?
+  category           ExpenseCategory
+  paymentMethod      String?
+  recurringExpenseId Int?
+  recurringExpense   RecurringExpense? @relation("RecurringExpenses", fields: [recurringExpenseId], references: [id])
 }
 
 model SalePayment {
   id        Int      @id @default(autoincrement())
   saleId    Int
-  sale      Sale     @relation(fields: [saleId], references: [id])
   amount    Float
   date      DateTime @default(now())
   method    String?
   note      String?
   createdAt DateTime @default(now())
+  sale      Sale     @relation(fields: [saleId], references: [id])
 }
 
 model CreditNote {
   id          Int                @id @default(autoincrement())
   saleId      Int                @unique
-  sale        Sale               @relation(fields: [saleId], references: [id])
   date        DateTime           @default(now())
   totalAmount Float
-  details     CreditNoteDetail[]
   createdAt   DateTime           @default(now())
+  sale        Sale               @relation(fields: [saleId], references: [id])
+  details     CreditNoteDetail[]
 }
 
 model CreditNoteDetail {
   id           Int        @id @default(autoincrement())
   creditNoteId Int
-  creditNote   CreditNote @relation(fields: [creditNoteId], references: [id])
   productId    Int
-  product      Product    @relation(fields: [productId], references: [id])
   quantity     Float
   unitPrice    Float
   totalPrice   Float
+  creditNote   CreditNote @relation(fields: [creditNoteId], references: [id])
+  product      Product    @relation(fields: [productId], references: [id])
 }
 
 model RecurringExpense {
   id            Int             @id @default(autoincrement())
-  concept       String // e.g. "Arriendo oficina"
-  amount        Float // e.g. 1875000
+  concept       String
+  amount        Float
   category      ExpenseCategory
-  paymentMethod String // e.g. "Transferencia", "Efectivo"
-  notes         String? // opcional
-  daysOfMonth   Int[] // lista de días del mes: [1], o [1,15]
+  paymentMethod String
+  notes         String?
+  daysOfMonth   Int[]
   createdAt     DateTime        @default(now())
   expenses      Expense[]       @relation("RecurringExpenses")
 }
 
-// FASE 3: Sistema de Notificaciones Inteligentes
 model Notification {
-  id          Int              @id @default(autoincrement())
-  title       String
-  message     String
-  type        NotificationType
-  priority    NotificationPriority @default(NORMAL)
-  category    String           // "STOCK", "VENCIMIENTO", "PAGOS", "VENTAS", "INVENTARIO"
-  
-  // Datos contextuales
-  relatedId   Int?             // ID del objeto relacionado (producto, venta, etc.)
-  relatedType String?          // "PRODUCT", "SALE", "PURCHASE", "EXPENSE"
-  metadata    Json?            // Datos adicionales en JSON
-  
-  // Estado
-  isRead      Boolean          @default(false)
-  isArchived  Boolean          @default(false)
-  
-  // Dirigida a usuario específico o broadcast
-  userId      Int?
-  user        User?            @relation(fields: [userId], references: [id])
-  
-  // Programación automática
-  autoGenerated Boolean        @default(false)
+  id            Int                  @id @default(autoincrement())
+  title         String
+  message       String
+  type          NotificationType
+  priority      NotificationPriority @default(NORMAL)
+  category      String
+  relatedId     Int?
+  relatedType   String?
+  metadata      Json?
+  isRead        Boolean              @default(false)
+  isArchived    Boolean              @default(false)
+  userId        Int?
+  autoGenerated Boolean              @default(false)
   ruleId        Int?
-  rule          NotificationRule? @relation(fields: [ruleId], references: [id])
-  
-  createdAt   DateTime         @default(now())
-  readAt      DateTime?
-  archivedAt  DateTime?
+  createdAt     DateTime             @default(now())
+  readAt        DateTime?
+  archivedAt    DateTime?
+  rule          NotificationRule?    @relation(fields: [ruleId], references: [id])
+  user          User?                @relation(fields: [userId], references: [id])
 }
 
 model NotificationRule {
-  id            Int                    @id @default(autoincrement())
-  name          String                 // "Stock Bajo Crítico", "Vencimiento Próximo"
+  id            Int                   @id @default(autoincrement())
+  name          String
   description   String?
-  
-  // Tipo de regla
-  triggerType   NotificationTrigger    // "STOCK_LOW", "EXPIRY_SOON", "PAYMENT_DUE", etc.
-  category      String                 // "STOCK", "VENCIMIENTO", "PAGOS"
-  
-  // Configuración de la regla
-  conditions    Json                   // Condiciones específicas en JSON
-  isActive      Boolean                @default(true)
-  
-  // Configuración de usuarios
-  targetUsers   Int[]                  // IDs de usuarios que reciben las notificaciones
-  
-  // Configuración de frecuencia
-  frequency     NotificationFrequency  @default(IMMEDIATE)
+  triggerType   NotificationTrigger
+  category      String
+  conditions    Json
+  isActive      Boolean               @default(true)
+  targetUsers   Int[]
+  frequency     NotificationFrequency @default(IMMEDIATE)
   lastTriggered DateTime?
-  
-  createdAt     DateTime               @default(now())
-  updatedAt     DateTime               @updatedAt
+  createdAt     DateTime              @default(now())
+  updatedAt     DateTime              @updatedAt
   notifications Notification[]
 }
 
 model NotificationPreference {
-  id                 Int      @id @default(autoincrement())
-  userId             Int      @unique
-  user               User     @relation("NotificationPreferences", fields: [userId], references: [id])
-  
-  // Preferencias por categoría
-  stockAlerts        Boolean  @default(true)
-  expiryAlerts       Boolean  @default(true)
-  paymentAlerts      Boolean  @default(true)
-  salesAlerts        Boolean  @default(false)
-  inventoryAlerts    Boolean  @default(true)
-  
-  // Configuración de frecuencia
-  emailEnabled       Boolean  @default(false)
-  pushEnabled        Boolean  @default(true)
-  
-  // Horarios de notificación
-  quietHoursStart    String?  // "22:00"
-  quietHoursEnd      String?  // "08:00"
-  
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+  id              Int      @id @default(autoincrement())
+  userId          Int      @unique
+  stockAlerts     Boolean  @default(true)
+  expiryAlerts    Boolean  @default(true)
+  paymentAlerts   Boolean  @default(true)
+  salesAlerts     Boolean  @default(false)
+  inventoryAlerts Boolean  @default(true)
+  emailEnabled    Boolean  @default(false)
+  pushEnabled     Boolean  @default(true)
+  quietHoursStart String?
+  quietHoursEnd   String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  user            User     @relation("NotificationPreferences", fields: [userId], references: [id])
+}
+
+model Capital {
+  id          Int      @id @default(autoincrement())
+  cash        Float    @default(0)
+  bank        Float    @default(0)
+  description String?
+  date        DateTime @default(now())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([date])
+}
+
+model CapitalMovement {
+  id            Int      @id @default(autoincrement())
+  type          String
+  amount        Float
+  description   String
+  category      String
+  paymentMethod String
+  cashBefore    Float?
+  bankBefore    Float?
+  cashAfter     Float?
+  bankAfter     Float?
+  saleId        Int?
+  invoiceId     Int?
+  expenseId     Int?
+  date          DateTime @default(now())
+  createdAt     DateTime @default(now())
+
+  @@index([type])
+  @@index([category])
+  @@index([date])
+}
+
+model Invoice {
+  id                  Int           @id @default(autoincrement())
+  invoiceNumber       String        @unique
+  supplierName        String
+  amount              Float
+  paidAmount          Float         @default(0)
+  status              String        @default("PENDING")
+  description         String?
+  invoiceDate         DateTime
+  dueDate             DateTime?
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+  hasInventoryImpact  Boolean       @default(true)
+  inventoryProcessed  Boolean       @default(false)
+  isHistorical        Boolean       @default(false)
+  needsReconciliation Boolean       @default(false)
+  originalDocument    String?
+  pricesAnalyzed      Boolean       @default(false)
+  supplierId          Int?
+  Supplier            Supplier?     @relation(fields: [supplierId], references: [id])
+  InvoiceItem         InvoiceItem[]
+
+  @@index([status])
+  @@index([invoiceDate])
+  @@index([dueDate])
+  @@index([isHistorical])
+  @@index([supplierId])
+}
+
+model CompanyConfig {
+  id               Int      @id @default(autoincrement())
+  companyName      String
+  nit              String?
+  address          String?
+  phone            String?
+  email            String?
+  website          String?
+  logo             String?
+  invoicePrefix    String?
+  invoiceFooter    String?
+  taxRate          Float?   @default(0)
+  currency         String   @default("COP")
+  posReceiptHeader String?
+  posReceiptFooter String?
+  printLogo        Boolean  @default(false)
+  timezone         String   @default("America/Bogota")
+  dateFormat       String   @default("DD/MM/YYYY")
+  numberFormat     String   @default("es-CO")
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@map("company_config")
+}
+
+model SystemModule {
+  id          Int                @id @default(autoincrement())
+  name        String             @unique
+  displayName String
+  description String?
+  route       String?
+  icon        String?
+  isActive    Boolean            @default(true)
+  order       Int                @default(0)
+  parentId    Int?
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+  permissions ModulePermission[]
+  parent      SystemModule?      @relation("ModuleHierarchy", fields: [parentId], references: [id])
+  children    SystemModule[]     @relation("ModuleHierarchy")
+
+  @@map("system_modules")
+}
+
+model ModulePermission {
+  id         Int          @id @default(autoincrement())
+  moduleId   Int
+  roleId     Int
+  canView    Boolean      @default(false)
+  canCreate  Boolean      @default(false)
+  canEdit    Boolean      @default(false)
+  canDelete  Boolean      @default(false)
+  canExport  Boolean      @default(false)
+  customData Json?
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+  module     SystemModule @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  role       Role         @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@unique([moduleId, roleId])
+  @@map("module_permissions")
+}
+
+model InvoiceItem {
+  id                  Int      @id @default(autoincrement())
+  invoiceId           Int
+  description         String
+  quantity            Float
+  unitPrice           Float
+  totalPrice          Float
+  productId           Int?
+  shouldCreateProduct Boolean  @default(false)
+  affectInventory     Boolean  @default(true)
+  currentMarketPrice  Float?
+  priceVariation      Float?
+  profitMargin        Float?
+  notes               String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime
+  Invoice             Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  Product             Product? @relation(fields: [productId], references: [id])
+
+  @@index([invoiceId])
+  @@index([productId])
+}
+
+enum MovementType {
+  IN
+  OUT
+  ADJUST
+}
+
+enum ExpenseCategory {
+  SERVICIOS
+  SUMINISTROS
+  ALQUILER
+  OTRO
 }
 
 enum NotificationType {
@@ -509,134 +600,4 @@ enum NotificationFrequency {
   HOURLY
   DAILY
   WEEKLY
-}
-
-// Modelo para gestión de capital (efectivo y banco)
-model Capital {
-  id              Int      @id @default(autoincrement())
-  cash            Float    @default(0)    // Dinero en efectivo
-  bank            Float    @default(0)    // Dinero en banco
-  description     String?  // Descripción del registro
-  date            DateTime @default(now()) // Fecha del registro
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  
-  @@index([date])
-}
-
-// Modelo para historial de movimientos de capital
-model CapitalMovement {
-  id              Int      @id @default(autoincrement())
-  type            String   // INGRESO, EGRESO
-  amount          Float    // Monto del movimiento
-  description     String   // Descripción del movimiento
-  category        String   // VENTA, PROVEEDOR, GASTO, OTRO
-  paymentMethod   String   // EFECTIVO, TRANSFERENCIA, TARJETA
-  cashBefore      Float?   // Capital en efectivo antes del movimiento
-  bankBefore      Float?   // Capital en banco antes del movimiento
-  cashAfter       Float?   // Capital en efectivo después del movimiento
-  bankAfter       Float?   // Capital en banco después del movimiento
-  saleId          Int?     // Referencia a venta (si aplica)
-  invoiceId       Int?     // Referencia a factura (si aplica)
-  expenseId       Int?     // Referencia a gasto (si aplica)
-  date            DateTime @default(now())
-  createdAt       DateTime @default(now())
-  
-  @@index([type])
-  @@index([category])
-  @@index([date])
-}
-
-// Modelo para gestión de facturas
-model Invoice {
-  id              Int      @id @default(autoincrement())
-  invoiceNumber   String   @unique // Número de la factura
-  supplierName    String   // Nombre del proveedor
-  amount          Float    // Monto total de la factura
-  paidAmount      Float    @default(0) // Monto pagado
-  status          String   @default("PENDING") // PENDING, PARTIAL, PAID
-  description     String?  // Descripción de la factura
-  invoiceDate     DateTime // Fecha de la factura
-  dueDate         DateTime? // Fecha de vencimiento
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  
-  @@index([status])
-  @@index([invoiceDate])
-  @@index([dueDate])
-}
-
-// Configuración de la empresa
-model CompanyConfig {
-  id                    Int      @id @default(autoincrement())
-  companyName          String   // Nombre de la empresa
-  nit                  String?  // NIT de la empresa
-  address              String?  // Dirección
-  phone                String?  // Teléfono
-  email                String?  // Email
-  website              String?  // Sitio web
-  logo                 String?  // URL del logo
-  
-  // Configuración de facturación
-  invoicePrefix        String?  // Prefijo de facturas (ej: "FACT-")
-  invoiceFooter        String?  // Pie de página de facturas
-  taxRate              Float?   @default(0) // Tasa de impuesto por defecto
-  currency             String   @default("COP") // Moneda
-  
-  // Configuración POS
-  posReceiptHeader     String?  // Encabezado del recibo POS
-  posReceiptFooter     String?  // Pie de página del recibo POS
-  printLogo            Boolean  @default(false) // Imprimir logo en recibos
-  
-  // Configuración del sistema
-  timezone             String   @default("America/Bogota") // Zona horaria
-  dateFormat           String   @default("DD/MM/YYYY") // Formato de fecha
-  numberFormat         String   @default("es-CO") // Formato de números
-  
-  createdAt            DateTime @default(now())
-  updatedAt            DateTime @updatedAt
-  
-  @@map("company_config")
-}
-
-// Módulos del sistema
-model SystemModule {
-  id            Int                 @id @default(autoincrement())
-  name          String              @unique // Nombre del módulo (ej: "products", "sales")
-  displayName   String              // Nombre para mostrar
-  description   String?             // Descripción del módulo
-  route         String?             // Ruta del módulo
-  icon          String?             // Icono del módulo
-  isActive      Boolean             @default(true)
-  order         Int                 @default(0) // Orden en el menú
-  parentId      Int?                // Para módulos anidados
-  parent        SystemModule?       @relation("ModuleHierarchy", fields: [parentId], references: [id])
-  children      SystemModule[]      @relation("ModuleHierarchy")
-  permissions   ModulePermission[]
-  createdAt     DateTime            @default(now())
-  updatedAt     DateTime            @updatedAt
-  
-  @@map("system_modules")
-}
-
-// Permisos de módulos por rol
-model ModulePermission {
-  id            Int                 @id @default(autoincrement())
-  moduleId      Int
-  roleId        Int
-  canView       Boolean             @default(false) // Puede ver el módulo
-  canCreate     Boolean             @default(false) // Puede crear registros
-  canEdit       Boolean             @default(false) // Puede editar registros
-  canDelete     Boolean             @default(false) // Puede eliminar registros
-  canExport     Boolean             @default(false) // Puede exportar datos
-  customData    Json?               // Permisos personalizados en formato JSON
-  
-  module        SystemModule        @relation(fields: [moduleId], references: [id], onDelete: Cascade)
-  role          Role                @relation(fields: [roleId], references: [id], onDelete: Cascade)
-  
-  createdAt     DateTime            @default(now())
-  updatedAt     DateTime            @updatedAt
-  
-  @@unique([moduleId, roleId])
-  @@map("module_permissions")
 }

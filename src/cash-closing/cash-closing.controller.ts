@@ -26,14 +26,24 @@ export class CashClosingController {
   }
 
   @Get()
-  findAll() {
-    return this.cashClosingService.findAll();
+  async findAll(@Query('dateFrom') dateFrom?: string, @Query('dateTo') dateTo?: string) {
+    return this.cashClosingService.findAll(dateFrom, dateTo);
   }
 
   @Get('summary')
   async getSummary(@Query('date') date: string) {
     // Devolver solo los datos, sin wrapper de success
     return this.cashClosingService.getSummary(date);
+  }
+
+  @Get('analytics')
+  async getAnalytics(@Query('days') days: string = '30') {
+    return this.cashClosingService.getAnalytics(parseInt(days));
+  }
+
+  @Get('alerts')
+  async getAlerts() {
+    return this.cashClosingService.getAlerts();
   }
 
   @Get(':id')
