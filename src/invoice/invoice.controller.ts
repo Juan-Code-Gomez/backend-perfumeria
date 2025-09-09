@@ -26,6 +26,41 @@ export class InvoiceController {
     return this.invoiceService.findAll(filters);
   }
 
+  @Get('debug')
+  async debugInvoices() {
+    try {
+      // Paso 1: Verificar conexión a la base de datos
+      const dbTest = await this.invoiceService.testDatabaseConnection();
+      
+      // Paso 2: Contar registros sin relaciones
+      const simpleCount = await this.invoiceService.getSimpleCount();
+      
+      // Paso 3: Intentar obtener un registro básico
+      const firstInvoice = await this.invoiceService.getFirstInvoiceBasic();
+      
+      // Paso 4: Intentar con relaciones
+      const firstInvoiceWithRelations = await this.invoiceService.getFirstInvoiceWithRelations();
+      
+      return {
+        status: 'success',
+        timestamp: new Date().toISOString(),
+        tests: {
+          databaseConnection: dbTest,
+          simpleCount,
+          firstInvoiceBasic: firstInvoice,
+          firstInvoiceWithRelations
+        }
+      };
+    } catch (error) {
+      return {
+        status: 'error',
+        timestamp: new Date().toISOString(),
+        error: error.message,
+        stack: error.stack
+      };
+    }
+  }
+
   @Get('summary')
   getInvoiceSummary() {
     return this.invoiceService.getInvoiceSummary();

@@ -145,4 +145,49 @@ export class InvoiceService {
     if (paidAmount >= amount) return 'PAID';
     return 'PARTIAL';
   }
+
+  // 🔍 MÉTODOS DE DEBUG TEMPORALES
+  async testDatabaseConnection() {
+    try {
+      await this.prisma.$queryRaw`SELECT 1`;
+      return { status: 'success', message: 'Database connection OK' };
+    } catch (error) {
+      return { status: 'error', message: error.message };
+    }
+  }
+
+  async getSimpleCount() {
+    try {
+      const count = await this.prisma.invoice.count();
+      return { status: 'success', count };
+    } catch (error) {
+      return { status: 'error', message: error.message };
+    }
+  }
+
+  async getFirstInvoiceBasic() {
+    try {
+      const invoice = await this.prisma.invoice.findFirst({
+        orderBy: { id: 'asc' }
+      });
+      return { status: 'success', invoice };
+    } catch (error) {
+      return { status: 'error', message: error.message };
+    }
+  }
+
+  async getFirstInvoiceWithRelations() {
+    try {
+      const invoice = await this.prisma.invoice.findFirst({
+        include: {
+          Supplier: true,
+          InvoiceItem: true
+        },
+        orderBy: { id: 'asc' }
+      });
+      return { status: 'success', invoice };
+    } catch (error) {
+      return { status: 'error', message: error.message };
+    }
+  }
 }
