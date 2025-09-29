@@ -33,6 +33,11 @@ export class AuthService {
       throw new UnauthorizedException('Credenciales inválidas');
     }
 
+    // Si se proporciona companyCode, validar que coincida
+    if (dto.companyCode && user.companyCode && user.companyCode !== dto.companyCode.toUpperCase()) {
+      throw new UnauthorizedException('Código de empresa no válido para este usuario');
+    }
+
     const roles = user.roles.map((ur) => ur.role.name);
     const token = this.jwt.sign({ id: user.id, roles });
     return { user, token };
