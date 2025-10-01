@@ -71,35 +71,59 @@ export class CashClosingService {
           user: existingClosing.createdBy?.name || 'Sistema'
         });
         
+        const readableDate = startOfDay.toLocaleDateString('es-ES', {
+          weekday: 'long',
+          year: 'numeric', 
+          month: 'long', 
+          day: 'numeric'
+        });
+        
         throw new BadRequestException(
-          `Ya existe un cierre para el ${startOfDay.toLocaleDateString()} ` +
-          `(ID: ${existingClosing.id}, creado por: ${existingClosing.createdBy?.name || 'Sistema'})`
+          `Ya existe un cierre de caja para ${readableDate}. ` +
+          `ID del cierre existente: ${existingClosing.id}, ` +
+          `creado el ${existingClosing.createdAt.toLocaleDateString('es-ES')} ` +
+          `por: ${existingClosing.createdBy?.name || 'Sistema'}. ` +
+          `Si necesitas modificarlo, edita el cierre existente en lugar de crear uno nuevo.`
         );
       }
 
-      // 1. Ventas del día
+      // 1. Ventas del día - SOLO VENTAS PAGADAS
       const sales = await this.prisma.sale.findMany({
         where: { 
           date: { gte: startOfDay, lte: endOfDay },
-          // Excluir ventas anuladas si existe ese campo
+          isPaid: true, // Solo ventas que han sido pagadas
         },
       });
 
-      console.log(`📊 Found ${sales.length} sales for the day`);
+      console.log(`📊 Found ${sales.length} PAID sales for the day`);
 
       const totalSales = sales.reduce((sum, s) => sum + (s.totalAmount || 0), 0);
+      
+      // SOLO ventas en efectivo Y pagadas afectan la caja física
       const cashSales = sales
-        .filter((s) => s.paymentMethod === 'Efectivo')
+        .filter((s) => s.paymentMethod === 'Efectivo' && s.isPaid)
         .reduce((sum, s) => sum + (s.totalAmount || 0), 0);
+        
       const cardSales = sales
-        .filter((s) => s.paymentMethod === 'Tarjeta')
+        .filter((s) => s.paymentMethod === 'Tarjeta' && s.isPaid)
         .reduce((sum, s) => sum + (s.totalAmount || 0), 0);
+        
       const transferSales = sales
-        .filter((s) => s.paymentMethod === 'Transferencia')
+        .filter((s) => s.paymentMethod === 'Transferencia' && s.isPaid)
         .reduce((sum, s) => sum + (s.totalAmount || 0), 0);
+        
+      // Ventas a crédito NO afectan el efectivo en caja
       const creditSales = sales
-        .filter((s) => s.paymentMethod === 'Crédito' || s.isPaid === false)
+        .filter((s) => s.paymentMethod === 'Crédito' || !s.isPaid)
         .reduce((sum, s) => sum + (s.totalAmount || 0), 0);
+
+      console.log(`💰 Sales breakdown:
+        - Total Sales: $${totalSales}
+        - Cash Sales (affects physical cash): $${cashSales}
+        - Card Sales: $${cardSales}
+        - Transfer Sales: $${transferSales}
+        - Credit Sales (no cash impact): $${creditSales}
+      `);
 
       // 2. Egresos del día
       const expenses = await this.prisma.expense.findMany({
@@ -129,16 +153,18 @@ export class CashClosingService {
       // 4. Ingresos extra del día (desde el DTO o 0)
       const totalIncome = data.totalIncome || 0;
 
-      // 5. Calcula caja según sistema
-      const systemCash =
-        (data.openingCash || 0) +
-        cashSales +
-        totalIncome -
-        totalExpense -
-        totalPayments;
+      // 5. Cálculo CORRECTO de caja según sistema
+      // FÓRMULA: Saldo Inicial + Ventas en Efectivo + Ingresos Extra - Gastos - Pagos a Proveedores
+      const systemCash = Number((
+        (data.openingCash || 0) +        // Dinero con que se abrió la caja
+        cashSales +                      // Solo ventas en efectivo (no tarjeta, no crédito)
+        (data.totalIncome || 0) -        // Ingresos extra (opcional)
+        totalExpense -                   // Gastos del día
+        totalPayments                    // Pagos hechos a proveedores
+      ).toFixed(2));
 
-      // 6. Diferencia real vs sistema
-      const difference = data.closingCash - systemCash;
+      // 6. Diferencia: Dinero real contado - Dinero que debería haber según sistema
+      const difference = Number(((data.closingCash || 0) - systemCash).toFixed(2));
 
       console.log(`💰 Cash calculation:
         Opening: $${data.openingCash}
@@ -292,28 +318,45 @@ export class CashClosingService {
       end: endOfDay.toISOString() 
     });
 
-    // 1. Todas las ventas del día (incluyendo las no pagadas para mostrar el resumen completo)
-    const sales = await this.prisma.sale.findMany({
+    // 1. Todas las ventas del día (separando pagadas de no pagadas)
+    const allSales = await this.prisma.sale.findMany({
       where: {
         date: { gte: startOfDay, lte: endOfDay },
       },
     });
 
-    console.log('Sales found:', sales.length);
+    const paidSales = allSales.filter(s => s.isPaid);
+    const unpaidSales = allSales.filter(s => !s.isPaid);
 
-    const totalSales = sales.reduce((sum, s) => sum + (s.totalAmount || 0), 0);
-    const cashSales = sales
-      .filter((s) => s.paymentMethod === 'Efectivo' && s.isPaid)
+    console.log(`📊 Sales summary: ${allSales.length} total (${paidSales.length} paid, ${unpaidSales.length} unpaid)`);
+
+    const totalSales = allSales.reduce((sum, s) => sum + (s.totalAmount || 0), 0);
+    
+    // SOLO ventas PAGADAS en efectivo afectan la caja física
+    const cashSales = paidSales
+      .filter((s) => s.paymentMethod === 'Efectivo')
       .reduce((sum, s) => sum + (s.totalAmount || 0), 0);
-    const cardSales = sales
-      .filter((s) => s.paymentMethod === 'Tarjeta' && s.isPaid)
+      
+    const cardSales = paidSales
+      .filter((s) => s.paymentMethod === 'Tarjeta')
       .reduce((sum, s) => sum + (s.totalAmount || 0), 0);
-    const transferSales = sales
-      .filter((s) => s.paymentMethod === 'Transferencia' && s.isPaid)
+      
+    const transferSales = paidSales
+      .filter((s) => s.paymentMethod === 'Transferencia')
       .reduce((sum, s) => sum + (s.totalAmount || 0), 0);
-    const creditSales = sales
+      
+    // Crédito incluye ventas marcadas como crédito O ventas no pagadas
+    const creditSales = allSales
       .filter((s) => s.paymentMethod === 'Crédito' || !s.isPaid)
       .reduce((sum, s) => sum + (s.totalAmount || 0), 0);
+
+    console.log(`💰 Summary breakdown:
+      - Total Sales: $${totalSales}
+      - Cash Sales (paid): $${cashSales}
+      - Card Sales (paid): $${cardSales}
+      - Transfer Sales (paid): $${transferSales}
+      - Credit Sales (unpaid): $${creditSales}
+    `);
 
     // 2. Egresos/gastos del día
     const expenses = await this.prisma.expense.findMany({
@@ -339,20 +382,26 @@ export class CashClosingService {
     // 4. Ingresos extra
     const totalIncome = 0; // Si tienes modelo, ajusta aquí
 
-    // Caja según sistema (solo efectivo que efectivamente ingresó)
-    const systemCash = cashSales + totalIncome - totalExpense - totalPayments;
+    // Caja según sistema (FÓRMULA CORRECTA para mostrar en resumen)
+    // NOTA: Aquí NO incluimos saldo inicial porque eso lo ingresa el usuario
+    const systemCashBase = Number((cashSales + totalIncome - totalExpense - totalPayments).toFixed(2));
 
     const result = {
-      fecha: startOfDay,
-      totalSales,
-      cashSales,
-      cardSales,
-      transferSales,
-      creditSales,
-      totalExpense,
-      totalPayments,
-      totalIncome,
-      systemCash,
+      fecha: startOfDay.toISOString().split('T')[0],
+      totalSales: Number(totalSales.toFixed(2)),
+      cashSales: Number(cashSales.toFixed(2)),
+      cardSales: Number(cardSales.toFixed(2)),
+      transferSales: Number(transferSales.toFixed(2)),
+      creditSales: Number(creditSales.toFixed(2)),
+      totalExpense: Number(totalExpense.toFixed(2)),
+      totalPayments: Number(totalPayments.toFixed(2)),
+      totalIncome: Number(totalIncome.toFixed(2)),
+      systemCash: systemCashBase,
+      // Información adicional para el frontend
+      explanation: {
+        formula: "Saldo Inicial + Ventas Efectivo + Ingresos Extra - Gastos - Pagos Proveedores",
+        note: "El saldo inicial se ingresa manualmente en el formulario"
+      }
     };
 
     console.log('Summary result:', result);
