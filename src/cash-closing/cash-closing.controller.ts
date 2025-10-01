@@ -7,6 +7,8 @@ import {
   Param,
   UseGuards,
   Query,
+  Delete,
+  Put,
 } from '@nestjs/common';
 import { CashClosingService } from './cash-closing.service';
 import { CreateCashClosingDto } from './dto/create-cash-closing.dto';
@@ -55,5 +57,19 @@ export class CashClosingController {
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.cashClosingService.findOne(Number(id));
+  }
+
+  // Eliminar cierre de caja
+  @Delete(':id')
+  async delete(@Param('id') id: string, @Req() req: any) {
+    // const userId = req.user?.userId;
+    return this.cashClosingService.delete(Number(id) /*, userId*/);
+  }
+
+  // Actualizar cierre de caja
+  @Put(':id')
+  async update(@Param('id') id: string, @Body() dto: CreateCashClosingDto, @Req() req: any) {
+    // const userId = req.user?.userId;
+    return this.cashClosingService.update(Number(id), dto /*, userId*/);
   }
 }

@@ -16,40 +16,65 @@ export class CashClosingService {
         closingCash: data.closingCash
       });
 
+      // Manejo mejorado de fechas - evitar problemas de zona horaria
       if (data.date) {
-        // Crear fecha local sin interpretación UTC
         const dateStr = data.date.toString();
         console.log(`📅 Processing date string: ${dateStr}`);
-        const parts = dateStr.split('-');
-        date = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+        
+        // Crear fecha en zona horaria local sin conversión UTC
+        if (dateStr.includes('T')) {
+          // Si viene con hora, usar directamente
+          date = new Date(dateStr);
+        } else {
+          // Si es solo fecha (YYYY-MM-DD), crear explícitamente en local
+          const [year, month, day] = dateStr.split('-').map(Number);
+          date = new Date(year, month - 1, day, 12, 0, 0, 0); // Usar mediodía para evitar cambios de día
+        }
       } else {
         date = new Date();
       }
 
       console.log(`🎯 Parsed date object: ${date.toISOString()}`);
+      console.log(`🌍 Local date representation: ${date.toLocaleDateString()} ${date.toLocaleTimeString()}`);
 
-      // Calcula el rango del día
-      const startOfDay = new Date(date);
-      startOfDay.setHours(0, 0, 0, 0);
-      const endOfDay = new Date(date);
-      endOfDay.setHours(23, 59, 59, 999);
+      // Calcular rango del día en zona horaria local
+      const startOfDay = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 0, 0, 0, 0);
+      const endOfDay = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 23, 59, 59, 999);
 
-      console.log(`🕐 Date range: ${startOfDay.toISOString()} to ${endOfDay.toISOString()}`);
+      console.log(`🕐 Date range (Local): ${startOfDay.toISOString()} to ${endOfDay.toISOString()}`);
 
       console.log(`🔍 Processing cash closing for date: ${startOfDay.toISOString()}`);
 
-      // Busca si ya existe cierre para ese día (usando rango de fechas)
-      const exist = await this.prisma.cashClosing.findFirst({
+      // Buscar cierre existente con validación mejorada
+      const existingClosing = await this.prisma.cashClosing.findFirst({
         where: { 
           date: {
             gte: startOfDay,
             lte: endOfDay
           }
         },
+        select: {
+          id: true,
+          date: true,
+          createdAt: true,
+          createdBy: {
+            select: { username: true, name: true }
+          }
+        }
       });
-      if (exist) {
-        console.log(`⚠️ Found existing cash closing: ${exist.date.toISOString()}`);
-        throw new BadRequestException('Ya existe un cierre para este día.');
+
+      if (existingClosing) {
+        console.log(`⚠️ Found existing cash closing:`, {
+          id: existingClosing.id,
+          date: existingClosing.date.toISOString(),
+          created: existingClosing.createdAt.toISOString(),
+          user: existingClosing.createdBy?.name || 'Sistema'
+        });
+        
+        throw new BadRequestException(
+          `Ya existe un cierre para el ${startOfDay.toLocaleDateString()} ` +
+          `(ID: ${existingClosing.id}, creado por: ${existingClosing.createdBy?.name || 'Sistema'})`
+        );
       }
 
       // 1. Ventas del día
@@ -126,9 +151,36 @@ export class CashClosingService {
         Difference: $${difference}
       `);
 
-      // Validaciones adicionales
-      if (Math.abs(difference) > 50000) { // Diferencia mayor a $50,000
-        console.warn(`⚠️ Large cash difference detected: $${difference}`);
+      // Validaciones y alertas mejoradas
+      const alerts: Array<{level: string, message: string, recommendation: string}> = [];
+      const absDifference = Math.abs(difference);
+      
+      if (absDifference > 100000) { // Diferencia crítica > $100,000
+        console.error(`🚨 CRITICAL: Huge cash difference detected: $${difference}`);
+        alerts.push({
+          level: 'CRITICAL',
+          message: `Diferencia crítica de $${difference.toLocaleString()}. Revisar inmediatamente.`,
+          recommendation: 'Verificar conteo de dinero y transacciones del día'
+        });
+      } else if (absDifference > 50000) { // Diferencia importante > $50,000
+        console.warn(`⚠️ WARNING: Large cash difference detected: $${difference}`);
+        alerts.push({
+          level: 'WARNING',
+          message: `Diferencia significativa de $${difference.toLocaleString()}`,
+          recommendation: 'Revisar cálculos y conteo de efectivo'
+        });
+      } else if (absDifference > 10000) { // Diferencia menor > $10,000
+        console.log(`ℹ️ INFO: Minor cash difference: $${difference}`);
+        alerts.push({
+          level: 'INFO',
+          message: `Diferencia menor de $${difference.toLocaleString()}`,
+          recommendation: 'Verificar conteo si es necesario'
+        });
+      }
+
+      // Log de alertas
+      if (alerts.length > 0) {
+        console.log('🔔 Generated alerts:', alerts);
       }
 
       // Guarda el cierre
@@ -165,25 +217,31 @@ export class CashClosingService {
   }
 
   async findAll(dateFrom?: string, dateTo?: string) {
+    console.log('🔍 findAll called with filters:', { dateFrom, dateTo });
+    
     const where: any = {};
     
     if (dateFrom || dateTo) {
       where.date = {};
       
       if (dateFrom) {
-        const fromDate = new Date(dateFrom);
-        fromDate.setHours(0, 0, 0, 0);
+        // Crear fecha inicio del día en zona local
+        const [year, month, day] = dateFrom.split('-').map(Number);
+        const fromDate = new Date(year, month - 1, day, 0, 0, 0, 0);
         where.date.gte = fromDate;
+        console.log('📅 Date from (local):', fromDate.toISOString());
       }
       
       if (dateTo) {
-        const toDate = new Date(dateTo);
-        toDate.setHours(23, 59, 59, 999);
+        // Crear fecha fin del día en zona local
+        const [year, month, day] = dateTo.split('-').map(Number);
+        const toDate = new Date(year, month - 1, day, 23, 59, 59, 999);
         where.date.lte = toDate;
+        console.log('📅 Date to (local):', toDate.toISOString());
       }
     }
 
-    return this.prisma.cashClosing.findMany({
+    const result = await this.prisma.cashClosing.findMany({
       where,
       orderBy: { date: 'desc' },
       include: {
@@ -196,6 +254,9 @@ export class CashClosingService {
         },
       },
     });
+
+    console.log(`📊 Found ${result.length} cash closings`);
+    return result;
   }
 
   async findOne(id: number) {
@@ -203,24 +264,33 @@ export class CashClosingService {
   }
 
   async getSummary(date?: string) {
-    let today: Date;
+    let targetDate: Date;
     
+    // Manejo mejorado de fechas
     if (date) {
-      // Crear fecha local sin interpretación UTC
-      const parts = date.split('-');
-      today = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+      console.log('📅 getSummary called with date:', date);
+      
+      if (date.includes('T')) {
+        // Si viene con hora, usar directamente
+        targetDate = new Date(date);
+      } else {
+        // Si es solo fecha (YYYY-MM-DD), crear explícitamente en local
+        const [year, month, day] = date.split('-').map(Number);
+        targetDate = new Date(year, month - 1, day, 12, 0, 0, 0); // Usar mediodía
+      }
     } else {
-      today = new Date();
+      targetDate = new Date();
     }
     
-    const startOfDay = new Date(today);
-    startOfDay.setHours(0, 0, 0, 0);
-    const endOfDay = new Date(today);
-    endOfDay.setHours(23, 59, 59, 999);
+    // Calcular rango del día en zona horaria local
+    const startOfDay = new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate(), 0, 0, 0, 0);
+    const endOfDay = new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate(), 23, 59, 59, 999);
 
-    console.log('getSummary called with date:', date);
-    console.log('Date range:', { startOfDay, endOfDay });
-    console.log('Searching for expenses between:', startOfDay.toISOString(), 'and', endOfDay.toISOString());
+    console.log('🎯 Target date:', targetDate.toLocaleDateString());
+    console.log('🕐 Date range (Local):', { 
+      start: startOfDay.toISOString(), 
+      end: endOfDay.toISOString() 
+    });
 
     // 1. Todas las ventas del día (incluyendo las no pagadas para mostrar el resumen completo)
     const sales = await this.prisma.sale.findMany({
@@ -495,5 +565,171 @@ export class CashClosingService {
       console.error('❌ Error cleaning today closing:', error);
       throw new BadRequestException(`Error al limpiar cierres: ${error.message}`);
     }
+  }
+
+  // Eliminar cierre de caja
+  async delete(id: number, userId?: number) {
+    try {
+      console.log(`🗑️ Deleting cash closing with ID: ${id}`);
+      
+      // Verificar que existe
+      const existing = await this.prisma.cashClosing.findUnique({
+        where: { id },
+        include: {
+          createdBy: {
+            select: { username: true, name: true }
+          }
+        }
+      });
+
+      if (!existing) {
+        throw new BadRequestException(`No se encontró el cierre con ID: ${id}`);
+      }
+
+      console.log(`📋 Deleting closing:`, {
+        id: existing.id,
+        date: existing.date.toLocaleDateString(),
+        difference: existing.difference,
+        user: existing.createdBy?.name || 'Sistema'
+      });
+
+      // Eliminar el cierre
+      const deleted = await this.prisma.cashClosing.delete({
+        where: { id }
+      });
+
+      console.log(`✅ Cash closing deleted successfully`);
+      
+      return {
+        success: true,
+        message: `Cierre del ${existing.date.toLocaleDateString()} eliminado correctamente`,
+        data: deleted
+      };
+
+    } catch (error) {
+      console.error('❌ Error deleting cash closing:', error);
+      if (error instanceof BadRequestException) {
+        throw error;
+      }
+      throw new BadRequestException(`Error al eliminar cierre: ${error.message}`);
+    }
+  }
+
+  // Actualizar cierre de caja
+  async update(id: number, data: CreateCashClosingDto, userId?: number) {
+    try {
+      console.log(`📝 Updating cash closing with ID: ${id}`, data);
+      
+      // Verificar que existe
+      const existing = await this.prisma.cashClosing.findUnique({
+        where: { id }
+      });
+
+      if (!existing) {
+        throw new BadRequestException(`No se encontró el cierre con ID: ${id}`);
+      }
+
+      // Recalcular los valores con la nueva fecha si cambió
+      let targetDate = existing.date;
+      if (data.date && data.date !== existing.date.toISOString().split('T')[0]) {
+        // Si cambió la fecha, usar la nueva
+        const [year, month, day] = data.date.split('-').map(Number);
+        targetDate = new Date(year, month - 1, day, 12, 0, 0, 0);
+      }
+
+      // Obtener datos para recálculo
+      const summary = await this.calculateDaySummary(targetDate);
+      
+      // Calcular caja sistema actualizada
+      const systemCash = (data.openingCash || 0) + 
+                        summary.cashSales + 
+                        (data.totalIncome || 0) - 
+                        summary.totalExpense - 
+                        summary.totalPayments;
+
+      const difference = (data.closingCash || 0) - systemCash;
+
+      console.log(`💰 Updated calculation:`, {
+        systemCash,
+        difference,
+        previousDifference: existing.difference
+      });
+
+      // Actualizar el cierre
+      const updated = await this.prisma.cashClosing.update({
+        where: { id },
+        data: {
+          date: targetDate,
+          openingCash: data.openingCash || 0,
+          closingCash: data.closingCash || 0,
+          systemCash: Number(systemCash.toFixed(2)),
+          difference: Number(difference.toFixed(2)),
+          totalSales: summary.totalSales,
+          cashSales: summary.cashSales,
+          cardSales: summary.cardSales,
+          transferSales: summary.transferSales,
+          creditSales: summary.creditSales,
+          totalIncome: Number((data.totalIncome || 0).toFixed(2)),
+          totalExpense: summary.totalExpense,
+          totalPayments: summary.totalPayments,
+          notes: data.notes || existing.notes,
+        }
+      });
+
+      console.log(`✅ Cash closing updated successfully`);
+      return updated;
+
+    } catch (error) {
+      console.error('❌ Error updating cash closing:', error);
+      if (error instanceof BadRequestException) {
+        throw error;
+      }
+      throw new BadRequestException(`Error al actualizar cierre: ${error.message}`);
+    }
+  }
+
+  // Método auxiliar para calcular resumen del día
+  private async calculateDaySummary(date: Date) {
+    const startOfDay = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 0, 0, 0, 0);
+    const endOfDay = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 23, 59, 59, 999);
+
+    // Ventas del día
+    const sales = await this.prisma.sale.findMany({
+      where: { date: { gte: startOfDay, lte: endOfDay } },
+    });
+
+    const totalSales = sales.reduce((sum, s) => sum + (s.totalAmount || 0), 0);
+    const cashSales = sales.filter((s) => s.paymentMethod === 'Efectivo').reduce((sum, s) => sum + (s.totalAmount || 0), 0);
+    const cardSales = sales.filter((s) => s.paymentMethod === 'Tarjeta').reduce((sum, s) => sum + (s.totalAmount || 0), 0);
+    const transferSales = sales.filter((s) => s.paymentMethod === 'Transferencia').reduce((sum, s) => sum + (s.totalAmount || 0), 0);
+    const creditSales = sales.filter((s) => s.paymentMethod === 'Crédito' || s.isPaid === false).reduce((sum, s) => sum + (s.totalAmount || 0), 0);
+
+    // Gastos del día
+    const expenses = await this.prisma.expense.findMany({
+      where: { 
+        date: { gte: startOfDay, lte: endOfDay },
+        deletedAt: null 
+      },
+    });
+    const totalExpense = expenses.reduce((sum, e) => sum + (e.amount || 0), 0);
+
+    // Pagos a proveedores del día
+    const payments = await this.prisma.purchase.findMany({
+      where: { 
+        date: { gte: startOfDay, lte: endOfDay }, 
+        isPaid: true 
+      },
+    });
+    const totalPayments = payments.reduce((sum, p) => sum + (p.paidAmount || 0), 0);
+
+    return {
+      totalSales: Number(totalSales.toFixed(2)),
+      cashSales: Number(cashSales.toFixed(2)),
+      cardSales: Number(cardSales.toFixed(2)),
+      transferSales: Number(transferSales.toFixed(2)),
+      creditSales: Number(creditSales.toFixed(2)),
+      totalExpense: Number(totalExpense.toFixed(2)),
+      totalPayments: Number(totalPayments.toFixed(2))
+    };
   }
 }
