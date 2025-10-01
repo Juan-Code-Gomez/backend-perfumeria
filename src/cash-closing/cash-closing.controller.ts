@@ -54,6 +54,12 @@ export class CashClosingController {
     return this.cashClosingService.cleanTodayClosing();
   }
 
+  // Endpoint temporal para eliminar por ID - SOLO PARA DESARROLLO
+  @Post('delete-by-id/:id')
+  async deleteById(@Param('id') id: string) {
+    return this.cashClosingService.delete(Number(id));
+  }
+
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.cashClosingService.findOne(Number(id));
