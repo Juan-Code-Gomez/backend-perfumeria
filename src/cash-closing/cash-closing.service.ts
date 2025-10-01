@@ -136,19 +136,24 @@ export class CashClosingService {
 
       console.log(`💸 Found ${expenses.length} expenses totaling: $${totalExpense}`);
 
-      // 3. Pagos a proveedores del día (compras pagadas)
-      const payments = await this.prisma.purchase.findMany({
-        where: { 
-          date: { gte: startOfDay, lte: endOfDay }, 
-          isPaid: true 
-        },
-      });
-      const totalPayments = payments.reduce(
-        (sum, p) => sum + (p.paidAmount || 0),
-        0,
-      );
-
-      console.log(`🏪 Found ${payments.length} supplier payments totaling: $${totalPayments}`);
+    // 3. Pagos a proveedores del día (compras pagadas)
+    const payments = await this.prisma.purchase.findMany({
+      where: { 
+        date: { gte: startOfDay, lte: endOfDay }, 
+        isPaid: true 
+      },
+      include: {
+        supplier: {
+          select: {
+            name: true
+          }
+        }
+      }
+    });
+    const totalPayments = payments.reduce(
+      (sum, p) => sum + (p.paidAmount || 0),
+      0,
+    );      console.log(`🏪 Found ${payments.length} supplier payments totaling: $${totalPayments}`);
 
       // 4. Ingresos extra del día (desde el DTO o 0)
       const totalIncome = data.totalIncome || 0;
@@ -373,6 +378,13 @@ export class CashClosingService {
     // 3. Pagos a proveedores (compras pagadas)
     const payments = await this.prisma.purchase.findMany({
       where: { date: { gte: startOfDay, lte: endOfDay }, isPaid: true },
+      include: {
+        supplier: {
+          select: {
+            name: true
+          }
+        }
+      }
     });
     const totalPayments = payments.reduce(
       (sum, p) => sum + (p.paidAmount || 0),
@@ -397,6 +409,31 @@ export class CashClosingService {
       totalPayments: Number(totalPayments.toFixed(2)),
       totalIncome: Number(totalIncome.toFixed(2)),
       systemCash: systemCashBase,
+      // NUEVO: Detalle de transacciones individuales
+      salesDetail: allSales.map(sale => ({
+        id: sale.id,
+        totalAmount: sale.totalAmount,
+        paymentMethod: sale.paymentMethod,
+        isPaid: sale.isPaid,
+        createdAt: sale.createdAt,
+        customerName: sale.customerName || 'Cliente general',
+        // Si tienes relación con items, agregar aquí
+      })),
+      expensesDetail: expenses.map(expense => ({
+        id: expense.id,
+        amount: expense.amount,
+        description: expense.description,
+        date: expense.date,
+        createdAt: expense.createdAt,
+      })),
+      paymentsDetail: payments.map(payment => ({
+        id: payment.id,
+        amount: payment.paidAmount || 0,
+        supplierName: payment.supplier?.name || 'Proveedor',
+        description: `Pago a ${payment.supplier?.name || 'proveedor'} - $${(payment.paidAmount || 0).toFixed(2)}`,
+        date: payment.date,
+        createdAt: payment.createdAt,
+      })),
       // Información adicional para el frontend
       explanation: {
         formula: "Saldo Inicial + Ventas Efectivo + Ingresos Extra - Gastos - Pagos Proveedores",
@@ -768,6 +805,13 @@ export class CashClosingService {
         date: { gte: startOfDay, lte: endOfDay }, 
         isPaid: true 
       },
+      include: {
+        supplier: {
+          select: {
+            name: true
+          }
+        }
+      }
     });
     const totalPayments = payments.reduce((sum, p) => sum + (p.paidAmount || 0), 0);
 
