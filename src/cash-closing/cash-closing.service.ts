@@ -10,14 +10,23 @@ export class CashClosingService {
     let date: Date;
     
     try {
+      console.log(`📥 Received cash closing data:`, {
+        date: data.date,
+        openingCash: data.openingCash,
+        closingCash: data.closingCash
+      });
+
       if (data.date) {
         // Crear fecha local sin interpretación UTC
         const dateStr = data.date.toString();
+        console.log(`📅 Processing date string: ${dateStr}`);
         const parts = dateStr.split('-');
         date = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
       } else {
         date = new Date();
       }
+
+      console.log(`🎯 Parsed date object: ${date.toISOString()}`);
 
       // Calcula el rango del día
       const startOfDay = new Date(date);
@@ -25,13 +34,21 @@ export class CashClosingService {
       const endOfDay = new Date(date);
       endOfDay.setHours(23, 59, 59, 999);
 
+      console.log(`🕐 Date range: ${startOfDay.toISOString()} to ${endOfDay.toISOString()}`);
+
       console.log(`🔍 Processing cash closing for date: ${startOfDay.toISOString()}`);
 
-      // Busca si ya existe cierre para ese día
-      const exist = await this.prisma.cashClosing.findUnique({
-        where: { date: startOfDay },
+      // Busca si ya existe cierre para ese día (usando rango de fechas)
+      const exist = await this.prisma.cashClosing.findFirst({
+        where: { 
+          date: {
+            gte: startOfDay,
+            lte: endOfDay
+          }
+        },
       });
       if (exist) {
+        console.log(`⚠️ Found existing cash closing: ${exist.date.toISOString()}`);
         throw new BadRequestException('Ya existe un cierre para este día.');
       }
 
@@ -443,6 +460,40 @@ export class CashClosingService {
     } catch (error) {
       console.error('❌ Error getting alerts:', error);
       throw new BadRequestException(`Error al obtener alertas: ${error.message}`);
+    }
+  }
+
+  // Método temporal para limpiar cierre de hoy - SOLO PARA DESARROLLO
+  async cleanTodayClosing() {
+    try {
+      const today = new Date();
+      const todayString = today.toISOString().split('T')[0];
+      
+      console.log(`🧹 Limpiando cierres para ${todayString}`);
+      
+      const startOfDay = new Date(todayString + 'T00:00:00.000Z');
+      const endOfDay = new Date(todayString + 'T23:59:59.999Z');
+      
+      const deleted = await this.prisma.cashClosing.deleteMany({
+        where: {
+          date: {
+            gte: startOfDay,
+            lte: endOfDay
+          }
+        }
+      });
+      
+      console.log(`✅ Eliminados ${deleted.count} cierres para hoy`);
+      
+      return {
+        success: true,
+        message: `Eliminados ${deleted.count} cierres para ${todayString}`,
+        deleted: deleted.count
+      };
+      
+    } catch (error) {
+      console.error('❌ Error cleaning today closing:', error);
+      throw new BadRequestException(`Error al limpiar cierres: ${error.message}`);
     }
   }
 }

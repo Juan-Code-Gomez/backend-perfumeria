@@ -46,6 +46,12 @@ export class CashClosingController {
     return this.cashClosingService.getAlerts();
   }
 
+  // Endpoint temporal para limpiar cierre de hoy - SOLO PARA DESARROLLO
+  @Post('clean-today')
+  async cleanToday() {
+    return this.cashClosingService.cleanTodayClosing();
+  }
+
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.cashClosingService.findOne(Number(id));
