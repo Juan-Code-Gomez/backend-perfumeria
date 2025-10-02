@@ -9,7 +9,13 @@ import {
   Delete,
   UseGuards,
   ParseIntPipe,
+  UseInterceptors,
+  UploadedFile,
+  BadRequestException,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { diskStorage } from 'multer';
+import * as path from 'path';
 import { CompanyConfigService } from './company-config.service';
 import { CreateCompanyConfigDto, UpdateCompanyConfigDto } from './dto/company-config.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -24,6 +30,47 @@ export class CompanyConfigController {
   @Get('public')
   getPublicConfig() {
     return this.companyConfigService.getPublicConfig();
+  }
+
+  // Endpoint para subir logo de empresa
+  @Post('upload-logo')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN')
+  @UseInterceptors(FileInterceptor('logo', {
+    fileFilter: (req, file, cb) => {
+      // Solo permitir imágenes
+      if (file.mimetype.match(/\/(jpg|jpeg|png|gif|webp)$/)) {
+        cb(null, true);
+      } else {
+        cb(new Error('Solo se permiten archivos de imagen (jpg, jpeg, png, gif, webp)'), false);
+      }
+    },
+    limits: {
+      fileSize: 5 * 1024 * 1024, // 5MB máximo
+    },
+  }))
+  async uploadLogo(@UploadedFile() file: Express.Multer.File) {
+    if (!file) {
+      throw new BadRequestException('No se proporcionó ningún archivo');
+    }
+
+    try {
+      // Convertir archivo a base64
+      const base64Logo = `data:${file.mimetype};base64,${file.buffer.toString('base64')}`;
+      
+      const result = await this.companyConfigService.uploadLogoBase64(base64Logo);
+      return {
+        success: true,
+        message: 'Logo subido exitosamente',
+        data: {
+          logoUrl: result.logoUrl,
+          filename: 'logo.png', // Placeholder ya que usamos base64
+          companyConfig: result.companyConfig
+        }
+      };
+    } catch (error) {
+      throw new BadRequestException(`Error al subir logo: ${error.message}`);
+    }
   }
 
   @Post()

@@ -127,4 +127,44 @@ export class CompanyConfigService {
       logo: config.logo,
     };
   }
+
+  async uploadLogo(file: Express.Multer.File) {
+    if (!file) {
+      throw new Error('No se proporcionó ningún archivo');
+    }
+
+    // Construir la URL del logo (ahora se sirve desde el frontend)
+    const logoUrl = `/logos/${file.filename}`;
+
+    // Actualizar la configuración de empresa con la nueva URL del logo
+    const updatedConfig = await this.updateCurrent({ logo: logoUrl });
+
+    return {
+      success: true,
+      message: 'Logo subido exitosamente',
+      data: {
+        logoUrl,
+        filename: file.filename,
+        originalName: file.originalname,
+        size: file.size,
+        companyConfig: updatedConfig,
+      },
+    };
+  }
+
+  async uploadLogoBase64(base64Logo: string) {
+    if (!base64Logo) {
+      throw new Error('No se proporcionó ninguna imagen');
+    }
+
+    // Actualizar la configuración de empresa con el logo en base64
+    const updatedConfig = await this.updateCurrent({ logo: base64Logo });
+
+    return {
+      success: true,
+      message: 'Logo subido exitosamente',
+      logoUrl: base64Logo,
+      companyConfig: updatedConfig,
+    };
+  }
 }

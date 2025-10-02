@@ -6,11 +6,13 @@ import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
 import { TransformInterceptor } from './common/interceptors/transform.interceptor';
 import { createValidationPipe } from './common/pipes/validation.pipe';
 import { Logger } from '@nestjs/common';
+import { NestExpressApplication } from '@nestjs/platform-express';
+import { join } from 'path';
 
 async function bootstrap() {
   const logger = new Logger('Bootstrap');
 
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
   const configService = app.get(ConfigService);
 
   // Global pipes
@@ -24,6 +26,12 @@ async function bootstrap() {
     new LoggingInterceptor(),
     new TransformInterceptor(),
   );
+  
+  // Serve static files (ANTES del prefijo global para evitar el /api/)
+  app.useStaticAssets(join(__dirname, '..', 'uploads'), {
+    prefix: '/uploads/',
+  });
+  
   //hola x2
   // CORS configuration
   app.enableCors({
