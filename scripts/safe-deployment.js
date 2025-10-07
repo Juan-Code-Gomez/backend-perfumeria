@@ -48,7 +48,7 @@ async function checkIfDatabaseHasData() {
 async function runMigrationsOnly() {
   try {
     console.log('🔄 Ejecutando migraciones existentes...');
-    await execAsync('npx prisma migrate deploy --skip-seed');
+    await execAsync('npx prisma migrate deploy');
     console.log('✅ Migraciones aplicadas correctamente');
     return true;
   } catch (error) {
