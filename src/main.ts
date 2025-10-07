@@ -41,6 +41,7 @@ async function bootstrap() {
       'https://perfumeria-sistema-production-1c59.up.railway.app',
       'https://perfumeria-sistema-production.up.railway.app',
       'https://perfumeria-sistema-production-1d47.up.railway.app',
+      'https://perfumeria-sistema-production-2dc4.up.railway.app',
       'http://localhost:5173'
     ],
     credentials: true,
