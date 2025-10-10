@@ -482,39 +482,110 @@ export class ProductsService {
   }
 
   async bulkUploadProducts(file: Express.Multer.File, withSupplier: boolean = false) {
-    console.log('bulkUploadProducts - withSupplier:', withSupplier);
-    
-    const workbook = XLSX.read(file.buffer, { type: 'buffer' });
-    const sheet = workbook.Sheets[workbook.SheetNames[0]];
-    const rows: any[] = XLSX.utils.sheet_to_json(sheet);
+    try {
+      console.log('🚀 Iniciando carga masiva de productos...');
+      console.log('- Modo con proveedor:', withSupplier);
+      console.log('- Archivo:', file.originalname);
+      console.log('- Tamaño:', file.size, 'bytes');
+      
+      if (!file || !file.buffer) {
+        throw new Error('Archivo no válido o vacío');
+      }
 
-    const errores: any[] = [];
-    let productosCreados = 0,
-      productosActualizados = 0,
-      comprasCreadas = 0;
+      const workbook = XLSX.read(file.buffer, { type: 'buffer' });
+      console.log('- Hojas disponibles:', workbook.SheetNames);
+      
+      if (!workbook.SheetNames || workbook.SheetNames.length === 0) {
+        throw new Error('El archivo Excel no contiene hojas de cálculo');
+      }
 
-    if (withSupplier) {
-      console.log('Usando lógica CON proveedor');
-      // Lógica original con proveedor
-      return this.bulkUploadWithSupplier(rows, errores, productosCreados, productosActualizados, comprasCreadas);
-    } else {
-      console.log('Usando lógica SIN proveedor');
-      // Nueva lógica sin proveedor
-      return this.bulkUploadWithoutSupplier(rows, errores, productosCreados, productosActualizados);
+      const sheet = workbook.Sheets[workbook.SheetNames[0]];
+      const rows: any[] = XLSX.utils.sheet_to_json(sheet);
+      
+      console.log('- Filas encontradas:', rows.length);
+      
+      if (rows.length === 0) {
+        throw new Error('El archivo Excel está vacío o no tiene datos');
+      }
+
+      // Mostrar las primeras columnas para debug
+      const firstRow = rows[0];
+      console.log('- Columnas detectadas:', Object.keys(firstRow));
+      console.log('- Primera fila ejemplo:', JSON.stringify(firstRow, null, 2));
+      
+      // Validar si realmente tiene datos en proveedor
+      const tieneProveedorConDatos = rows.some(row => row['Proveedor'] && row['Proveedor'].toString().trim() !== '');
+      const tieneColumnaProveedor = 'Proveedor' in firstRow;
+      console.log('- Tiene columna Proveedor:', tieneColumnaProveedor);
+      console.log('- Tiene proveedores con datos:', tieneProveedorConDatos);
+      console.log('- Modo withSupplier:', withSupplier);
+      
+      if (withSupplier && !tieneProveedorConDatos) {
+        console.log('⚠️ ADVERTENCIA: Se seleccionó modo con proveedor pero ninguna fila tiene proveedor');
+        if (tieneColumnaProveedor) {
+          throw new Error('Se seleccionó modo "con proveedor" pero todas las filas tienen la columna "Proveedor" vacía. Use el modo "sin proveedor" o complete los proveedores.');
+        }
+      }
+      
+      // Si NO se seleccionó withSupplier pero SÍ hay columna proveedor, advertir
+      if (!withSupplier && tieneColumnaProveedor) {
+        console.log('ℹ️ INFORMACIÓN: El Excel tiene columna "Proveedor" pero se usará modo "sin proveedor" - la columna será ignorada');
+      }
+
+      const errores: any[] = [];
+      let productosCreados = 0,
+        productosActualizados = 0,
+        comprasCreadas = 0;
+
+      // Validar que tenemos las columnas mínimas requeridas
+      const columnasRequeridas = ['Nombre producto', 'Categoría', 'Unidad', 'Precio compra'];
+      const columnasFaltantes = columnasRequeridas.filter(col => !(col in firstRow));
+      
+      if (columnasFaltantes.length > 0) {
+        throw new Error(`Faltan columnas obligatorias en el Excel: ${columnasFaltantes.join(', ')}`);
+      }
+
+      if (withSupplier) {
+        // Validar columna proveedor si es requerida
+        if (!('Proveedor' in firstRow)) {
+          throw new Error('Se seleccionó modo "con proveedor" pero falta la columna "Proveedor" en el Excel');
+        }
+        console.log('✅ Usando lógica CON proveedor');
+        return this.bulkUploadWithSupplier(rows, errores, productosCreados, productosActualizados, comprasCreadas);
+      } else {
+        console.log('✅ Usando lógica SIN proveedor');
+        return this.bulkUploadWithoutSupplier(rows, errores, productosCreados, productosActualizados);
+      }
+    } catch (error) {
+      console.error('❌ Error en bulkUploadProducts:', error);
+      throw new Error(`Error procesando el archivo: ${error.message}`);
     }
   }
 
   private async bulkUploadWithSupplier(rows: any[], errores: any[], productosCreados: number, productosActualizados: number, comprasCreadas: number) {
+    console.log('📦 Iniciando carga masiva CON proveedor...');
+    
     // Agrupar productos por proveedor como ya lo tienes
     const comprasPorProveedor: Record<string, any[]> = {};
     rows.forEach((row, i) => {
-      if (!row['Proveedor']) {
-        errores.push({ fila: i + 2, error: 'Falta proveedor' });
+      const fila = i + 2; // +2 porque Excel empieza en 1 y tiene header
+      
+      // Validación mejorada de proveedor
+      if (!row['Proveedor'] || row['Proveedor'].toString().trim() === '') {
+        errores.push({ 
+          fila, 
+          producto: row['Nombre producto'] || 'Sin nombre',
+          error: 'Falta el nombre del proveedor',
+          detalle: 'Se seleccionó modo "con proveedor" pero la columna "Proveedor" está vacía',
+          solucion: 'Complete el nombre del proveedor o use el modo "sin proveedor"'
+        });
         return;
       }
-      if (!comprasPorProveedor[row['Proveedor']])
-        comprasPorProveedor[row['Proveedor']] = [];
-      comprasPorProveedor[row['Proveedor']].push({ ...row, _fila: i + 2 });
+      
+      const proveedorNombre = row['Proveedor'].toString().trim();
+      if (!comprasPorProveedor[proveedorNombre])
+        comprasPorProveedor[proveedorNombre] = [];
+      comprasPorProveedor[proveedorNombre].push({ ...row, _fila: fila });
     });
 
     for (const proveedorNombre in comprasPorProveedor) {
@@ -694,8 +765,17 @@ export class ProductsService {
       }
     }
 
+    console.log('🎉 Carga masiva (con proveedor) completada:');
+    console.log(`- Productos creados: ${productosCreados}`);
+    console.log(`- Productos actualizados: ${productosActualizados}`);
+    console.log(`- Compras creadas: ${comprasCreadas}`);
+    console.log(`- Errores encontrados: ${errores.length}`);
+
     return {
-      mensaje: 'Carga finalizada',
+      success: errores.length === 0,
+      mensaje: errores.length === 0 ? 
+        'Carga completada exitosamente (con proveedores)' : 
+        `Carga completada con errores (${errores.length} problemas encontrados)`,
       productosCreados,
       productosActualizados,
       comprasCreadas,
@@ -711,35 +791,68 @@ export class ProductsService {
 
       console.log(`Procesando fila ${fila}: ${row['Nombre producto']}`);
       
-      // Validar campos obligatorios (sin proveedor)
-      if (!row['Nombre producto'] || !row['Categoría'] || !row['Unidad']) {
+      // Validar campos obligatorios específicos (sin proveedor)
+      const camposFaltantes: string[] = [];
+      if (!row['Nombre producto'] || row['Nombre producto'].toString().trim() === '') {
+        camposFaltantes.push('Nombre producto');
+      }
+      if (!row['Categoría'] || row['Categoría'].toString().trim() === '') {
+        camposFaltantes.push('Categoría');
+      }
+      if (!row['Unidad'] || row['Unidad'].toString().trim() === '') {
+        camposFaltantes.push('Unidad');
+      }
+      
+      if (camposFaltantes.length > 0) {
         errores.push({
           fila,
-          error: 'Faltan campos obligatorios (Nombre producto, Categoría o Unidad)',
+          producto: row['Nombre producto'] || 'Sin nombre',
+          error: `Campos obligatorios faltantes: ${camposFaltantes.join(', ')}`,
+          detalle: 'Estos campos son requeridos para crear o actualizar un producto'
         });
         continue;
       }
 
       // Buscar categoría
+      console.log(`Buscando categoría: "${row['Categoría']}"`);
       const categoria = await this.prisma.category.findFirst({
         where: { name: row['Categoría'] },
       });
       if (!categoria) {
+        // Obtener categorías disponibles para sugerir
+        const categoriasDisponibles = await this.prisma.category.findMany({
+          where: { isActive: true },
+          select: { name: true }
+        });
+        
         errores.push({
           fila,
-          error: `Categoría no existe: ${row['Categoría']}`,
+          producto: row['Nombre producto'],
+          error: `Categoría "${row['Categoría']}" no existe en el sistema`,
+          detalle: 'Categorías disponibles: ' + categoriasDisponibles.map(c => c.name).join(', '),
+          solucion: 'Debe usar una categoría existente o crear la categoría en el sistema primero'
         });
         continue;
       }
 
       // Buscar unidad
+      console.log(`Buscando unidad: "${row['Unidad']}"`);
       const unidad = await this.prisma.unit.findFirst({
         where: { name: row['Unidad'] },
       });
       if (!unidad) {
+        // Obtener unidades disponibles para sugerir
+        const unidadesDisponibles = await this.prisma.unit.findMany({
+          where: { isActive: true },
+          select: { name: true }
+        });
+        
         errores.push({
           fila,
-          error: `Unidad no existe: ${row['Unidad']}`,
+          producto: row['Nombre producto'],
+          error: `Unidad "${row['Unidad']}" no existe en el sistema`,
+          detalle: 'Unidades disponibles: ' + unidadesDisponibles.map(u => u.name).join(', '),
+          solucion: 'Debe usar una unidad existente o crear la unidad en el sistema primero'
         });
         continue;
       }
@@ -791,9 +904,26 @@ export class ProductsService {
       if (precioCompra <= 0) {
         errores.push({
           fila,
-          error: 'Se requiere precio de compra para crear el producto',
+          producto: row['Nombre producto'],
+          error: 'Precio de compra inválido o faltante',
+          detalle: `Valor recibido: "${row['Precio compra']}" - Se requiere un número mayor a 0`,
+          solucion: 'Ingrese un precio de compra válido (mayor a 0) en la columna "Precio compra"'
         });
         continue;
+      }
+
+      // Validar stock si se proporciona
+      if (row['Stock inicial'] !== undefined && row['Stock inicial'] !== null && row['Stock inicial'] !== '') {
+        if (isNaN(stockToAdd) || stockToAdd < 0) {
+          errores.push({
+            fila,
+            producto: row['Nombre producto'],
+            error: 'Stock inicial inválido',
+            detalle: `Valor recibido: "${row['Stock inicial']}" - Debe ser un número mayor o igual a 0`,
+            solucion: 'Ingrese un stock inicial válido (número entero >= 0) o deje vacío'
+          });
+          continue;
+        }
       }
 
       // Si aún no tenemos precio de venta, usar precio de compra como base mínima
@@ -845,12 +975,206 @@ export class ProductsService {
       }
     }
 
+    console.log('🎉 Carga masiva completada:');
+    console.log(`- Productos creados: ${productosCreados}`);
+    console.log(`- Productos actualizados: ${productosActualizados}`);
+    console.log(`- Errores encontrados: ${errores.length}`);
+    
+    if (errores.length > 0) {
+      console.log('⚠️ Errores detallados:');
+      errores.forEach(error => {
+        console.log(`  Fila ${error.fila}: ${error.error}`);
+      });
+    }
+
     return {
-      mensaje: 'Carga finalizada (sin proveedores)',
+      success: errores.length === 0,
+      mensaje: errores.length === 0 ? 
+        'Carga completada exitosamente (sin proveedores)' : 
+        `Carga completada con errores (${errores.length} filas fallaron)`,
       productosCreados,
       productosActualizados,
       comprasCreadas: 0, // No se crean compras sin proveedor
+      totalFilasProcesadas: rows.length,
       errores,
     };
+  }
+
+  async getBulkUploadInfo() {
+    const categorias = await this.prisma.category.findMany({
+      where: { isActive: true },
+      select: { id: true, name: true, description: true },
+      orderBy: { name: 'asc' }
+    });
+
+    const unidades = await this.prisma.unit.findMany({
+      where: { isActive: true },
+      select: { id: true, name: true, symbol: true, description: true },
+      orderBy: { name: 'asc' }
+    });
+
+    return {
+      mensaje: 'Información para carga masiva de productos',
+      columnasRequeridas: {
+        obligatorias: ['Nombre producto', 'Categoría', 'Unidad', 'Precio compra'],
+        opcionales: ['Descripción', 'Precio venta', 'Stock inicial', 'Stock mínimo', 'Imagen URL'],
+        conProveedor: ['Proveedor'] // Solo requerida si withSupplier=true
+      },
+      categorias: categorias.map(c => ({
+        nombre: c.name,
+        descripcion: c.description
+      })),
+      unidades: unidades.map(u => ({
+        nombre: u.name,
+        simbolo: u.symbol,
+        descripcion: u.description
+      })),
+      ejemploExcel: {
+        'Nombre producto': 'Mont Blanc Starwalker',
+        'Descripción': 'Perfume premium masculino',
+        'Categoría': 'Premium ZB',
+        'Unidad': 'Unidad',
+        'Precio compra': 28000,
+        'Precio venta': 90000,
+        'Stock inicial': 5,
+        'Stock mínimo': 2,
+        'Imagen URL': 'https://ejemplo.com/imagen.jpg'
+      },
+      notas: [
+        'Las categorías y unidades deben existir previamente en el sistema',
+        'Si no se especifica precio de venta, se calculará automáticamente',
+        'Para esencias, solo se permite la unidad "gramos"',
+        'El stock inicial debe ser un número >= 0',
+        'El precio de compra es obligatorio y debe ser > 0'
+      ]
+    };
+  }
+
+  async testBulkUpload(file: Express.Multer.File, withSupplier: boolean = false) {
+    try {
+      console.log('🧪 TEST - Analizando archivo de carga masiva...');
+      console.log('- Archivo:', file.originalname);
+      console.log('- Tamaño:', file.size, 'bytes');
+      console.log('- MIME type:', file.mimetype);
+      console.log('- withSupplier:', withSupplier);
+
+      if (!file || !file.buffer) {
+        throw new Error('Archivo no válido o vacío');
+      }
+
+      // Leer el archivo
+      let rows: any[];
+      if (file.mimetype === 'text/csv') {
+        // Para CSV, convertir a JSON manualmente
+        const csvText = file.buffer.toString('utf8');
+        const lines = csvText.split('\n').filter(line => line.trim());
+        const headers = lines[0].split(',').map(h => h.trim());
+        
+        rows = lines.slice(1).map(line => {
+          const values = line.split(',');
+          const obj: any = {};
+          headers.forEach((header, index) => {
+            obj[header] = values[index]?.trim() || '';
+          });
+          return obj;
+        });
+      } else {
+        // Para Excel
+        const workbook = XLSX.read(file.buffer, { type: 'buffer' });
+        const sheet = workbook.Sheets[workbook.SheetNames[0]];
+        rows = XLSX.utils.sheet_to_json(sheet);
+      }
+
+      console.log('- Filas encontradas:', rows.length);
+      
+      if (rows.length === 0) {
+        return {
+          success: false,
+          error: 'El archivo está vacío o no tiene datos',
+          data: null
+        };
+      }
+
+      const firstRow = rows[0];
+      const columnas = Object.keys(firstRow);
+      
+      // Análisis de columnas
+      const columnasRequeridas = ['Nombre producto', 'Categoría', 'Unidad', 'Precio compra'];
+      const columnasFaltantes = columnasRequeridas.filter(col => !columnas.includes(col));
+      const tieneColumnaProveedor = columnas.includes('Proveedor');
+      const tieneProveedorConDatos = rows.some(row => row['Proveedor'] && row['Proveedor'].toString().trim() !== '');
+
+      // Análisis de datos
+      const filasConProblemas: any[] = [];
+      const categorias = new Set<string>();
+      const unidades = new Set<string>();
+
+      rows.forEach((row, index) => {
+        const fila = index + 2;
+        const problemas: string[] = [];
+
+        // Validar campos obligatorios
+        columnasRequeridas.forEach(campo => {
+          if (!row[campo] || row[campo].toString().trim() === '') {
+            problemas.push(`Falta ${campo}`);
+          }
+        });
+
+        // Validar proveedor si es necesario
+        if (withSupplier && (!row['Proveedor'] || row['Proveedor'].toString().trim() === '')) {
+          problemas.push('Falta Proveedor');
+        }
+
+        if (problemas.length > 0) {
+          filasConProblemas.push({
+            fila,
+            producto: row['Nombre producto'] || 'Sin nombre',
+            problemas
+          });
+        }
+
+        // Recopilar categorías y unidades
+        if (row['Categoría']) categorias.add(row['Categoría']);
+        if (row['Unidad']) unidades.add(row['Unidad']);
+      });
+
+      return {
+        success: columnasFaltantes.length === 0 && filasConProblemas.length === 0,
+        archivo: {
+          nombre: file.originalname,
+          tamaño: file.size,
+          tipo: file.mimetype,
+        },
+        configuracion: {
+          withSupplier,
+          tieneColumnaProveedor,
+          tieneProveedorConDatos
+        },
+        analisis: {
+          totalFilas: rows.length,
+          columnasDetectadas: columnas,
+          columnasRequeridas,
+          columnasFaltantes,
+          categorias: Array.from(categorias),
+          unidades: Array.from(unidades),
+          filasConProblemas: filasConProblemas.slice(0, 10), // Solo las primeras 10
+          totalFilasConProblemas: filasConProblemas.length
+        },
+        primerasFila: rows.slice(0, 3), // Primeras 3 filas como ejemplo
+        recomendaciones: [
+          columnasFaltantes.length > 0 ? `Agregar columnas faltantes: ${columnasFaltantes.join(', ')}` : null,
+          withSupplier && !tieneProveedorConDatos ? 'Llenar la columna Proveedor o cambiar a modo sin proveedor' : null,
+          !withSupplier && tieneProveedorConDatos ? 'Los datos de proveedor serán ignorados en modo sin proveedor' : null
+        ].filter(Boolean)
+      };
+
+    } catch (error) {
+      console.error('❌ Error en testBulkUpload:', error);
+      return {
+        success: false,
+        error: error.message,
+        data: null
+      };
+    }
   }
 }

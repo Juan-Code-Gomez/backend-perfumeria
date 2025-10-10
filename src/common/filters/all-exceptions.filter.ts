@@ -1,4 +1,4 @@
-import { ExceptionFilter, Catch, ArgumentsHost, HttpException, HttpStatus, Logger } from '@nestjs/common';
+import { ExceptionFilter, Catch, ArgumentsHost, HttpException, HttpStatus, Logger, BadRequestException } from '@nestjs/common';
 import { Request, Response } from 'express';
 import { Prisma } from '@prisma/client';
 
@@ -24,8 +24,16 @@ export class AllExceptionsFilter implements ExceptionFilter {
         message = exceptionResponse;
       } else if (typeof exceptionResponse === 'object' && exceptionResponse !== null) {
         const responseObj = exceptionResponse as any;
-        message = responseObj.message || responseObj.error || message;
-        error = responseObj.error || error;
+        
+        // Special handling for validation errors
+        if (exception instanceof BadRequestException && responseObj.message && Array.isArray(responseObj.message)) {
+          message = `Errores de validación: ${responseObj.message.join(', ')}`;
+          error = 'Validation Error';
+          this.logger.error('Validation Error Details:', responseObj.message);
+        } else {
+          message = responseObj.message || responseObj.error || message;
+          error = responseObj.error || error;
+        }
       }
     }
     // Handle Prisma exceptions
@@ -58,8 +66,9 @@ export class AllExceptionsFilter implements ExceptionFilter {
     // Handle Prisma validation errors
     else if (exception instanceof Prisma.PrismaClientValidationError) {
       status = HttpStatus.BAD_REQUEST;
-      message = 'Datos de entrada inválidos';
+      message = `Datos de entrada inválidos: ${exception.message}`;
       error = 'Validation Error';
+      this.logger.error('Prisma Validation Error Details:', exception.message);
     }
     // Handle other errors
     else if (exception instanceof Error) {
