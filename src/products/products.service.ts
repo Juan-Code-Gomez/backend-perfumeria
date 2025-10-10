@@ -4,6 +4,7 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateProductMovementDto } from './dto/create-product-movement.dto';
 import { CreateProductDto, UpdateProductDto } from './dto/enhanced-product.dto';
+import { ExportInventoryResponse } from './interfaces/export-inventory-response.interface';
 import * as XLSX from 'xlsx';
 
 @Injectable()
@@ -479,6 +480,562 @@ export class ProductsService {
         error: 'Error al exportar productos'
       };
     }
+  }
+
+  async exportInventory(options: any = {}): Promise<ExportInventoryResponse> {
+    try {
+      console.log('📋 Exportando inventario con opciones:', options);
+      
+      // Construir filtros
+      const where: any = {};
+      
+      // Filtro por categorías
+      if (options.categories && options.categories.length > 0) {
+        where.categoryId = { in: options.categories };
+      }
+      
+      // Filtro por nivel de stock
+      if (options.stockLevel === 'low') {
+        // Solo productos con stock bajo
+        where.stock = { lte: 5 }; // O usar minStock si está definido
+      } else if (options.stockLevel === 'out') {
+        where.stock = { lte: 0 };
+      } else if (options.stockLevel === 'positive') {
+        where.stock = { gt: 0 };
+      }
+      
+      // Filtro por rango de precios
+      if (options.minPrice || options.maxPrice) {
+        where.salePrice = {};
+        if (options.minPrice) where.salePrice.gte = options.minPrice;
+        if (options.maxPrice) where.salePrice.lte = options.maxPrice;
+      }
+
+      // Obtener productos
+      const products = await this.prisma.product.findMany({
+        where,
+        include: {
+          category: true,
+          unit: true,
+        },
+        orderBy: this.getSortOrder(options.sortBy),
+      });
+
+      console.log(`📊 Productos encontrados: ${products.length}`);
+
+      // Generar según formato
+      switch (options.format) {
+        case 'pdf':
+          return this.generateInventoryPDF(products, options);
+        case 'csv':
+          return this.generateInventoryCSV(products, options);
+        default:
+          return this.generateInventoryExcel(products, options);
+      }
+    } catch (error) {
+      console.error('Error al exportar inventario:', error);
+      return {
+        success: false,
+        error: 'Error al generar exportación de inventario'
+      };
+    }
+  }
+
+  private getSortOrder(sortBy: string): Record<string, any> {
+    switch (sortBy) {
+      case 'stock':
+        return { stock: 'desc' as const };
+      case 'category':
+        return { category: { name: 'asc' as const } };
+      case 'value':
+        return { salePrice: 'desc' as const };
+      case 'code':
+        return { id: 'asc' as const };
+      default:
+        return { name: 'asc' as const };
+    }
+  }
+
+
+
+  private async generateInventoryExcel(products: any[], options: any) {
+    const { 
+      includeImages = false, 
+      includeStockValue = true, 
+      includePhysicalCountColumns = true,
+      title = 'Inventario Físico',
+      notes = '',
+      groupBy = 'none'
+    } = options;
+
+    // Agrupar productos si es necesario
+    const groupedProducts = this.groupProducts(products, groupBy);
+    
+    const workbook = XLSX.utils.book_new();
+    
+    // Crear datos para cada grupo
+    for (const [groupName, groupProducts] of Object.entries(groupedProducts)) {
+      const exportData = (groupProducts as any[]).map((product, index) => {
+        const inventoryValue = product.stock * product.purchasePrice;
+        const potentialValue = product.stock * product.salePrice;
+        
+        const row: any = {
+          'N°': index + 1,
+          'Código': `P${product.id.toString().padStart(4, '0')}`,
+          'Nombre del Producto': product.name,
+          'Categoría': product.category.name,
+          'Unidad': product.unit.symbol || product.unit.name,
+          'Stock Sistema': product.stock,
+        };
+
+        // Columnas para inventariado físico
+        if (includePhysicalCountColumns) {
+          row['Stock Físico'] = ''; // Para que escriban manualmente
+          row['Diferencia'] = ''; // Para calcular después
+          row['Observaciones'] = ''; // Para notas del conteo
+        }
+
+        // Información adicional
+        if (includeStockValue) {
+          row['Precio Unitario'] = product.salePrice;
+          row['Valor en Sistema'] = Math.round(inventoryValue * 100) / 100;
+          row['Valor Potencial'] = Math.round(potentialValue * 100) / 100;
+        }
+
+        row['Stock Mínimo'] = product.minStock || 0;
+        row['Última Actualización'] = product.updatedAt.toLocaleDateString('es-ES');
+
+        if (includeImages && product.imageUrl) {
+          row['URL Imagen'] = product.imageUrl;
+        }
+
+        return row;
+      });
+
+      // Agregar información de encabezado
+      const headerData = [
+        { 'N°': title },
+        { 'N°': `Fecha: ${new Date().toLocaleDateString('es-ES')}` },
+        { 'N°': `Grupo: ${groupName}` },
+        { 'N°': `Total productos: ${groupProducts.length}` },
+        ...(notes ? [{ 'N°': `Notas: ${notes}` }] : []),
+        { 'N°': '' }, // Fila vacía
+      ];
+
+      const fullData = [...headerData, ...exportData];
+      
+      const worksheet = XLSX.utils.json_to_sheet(fullData);
+
+      // Configurar anchos de columnas
+      const baseColWidths = [
+        { wpx: 40 },   // N°
+        { wpx: 80 },   // Código
+        { wpx: 250 },  // Nombre del Producto
+        { wpx: 120 },  // Categoría
+        { wpx: 80 },   // Unidad
+        { wpx: 100 },  // Stock Sistema
+      ];
+
+      if (includePhysicalCountColumns) {
+        baseColWidths.push(
+          { wpx: 100 },  // Stock Físico
+          { wpx: 100 },  // Diferencia
+          { wpx: 200 },  // Observaciones
+        );
+      }
+
+      if (includeStockValue) {
+        baseColWidths.push(
+          { wpx: 100 },  // Precio Unitario
+          { wpx: 120 },  // Valor en Sistema
+          { wpx: 120 },  // Valor Potencial
+        );
+      }
+
+      baseColWidths.push(
+        { wpx: 100 },  // Stock Mínimo
+        { wpx: 120 },  // Última Actualización
+      );
+
+      if (includeImages) {
+        baseColWidths.push({ wpx: 200 }); // URL Imagen
+      }
+
+      worksheet['!cols'] = baseColWidths;
+
+      // Agregar fórmulas para calcular diferencias automáticamente
+      if (includePhysicalCountColumns && exportData.length > 0) {
+        // Agregar fórmulas en las columnas de diferencia
+        // (esto requiere más lógica específica de Excel)
+      }
+
+      const sheetName = groupName === 'Todos' ? 'Inventario' : groupName.substring(0, 31);
+      XLSX.utils.book_append_sheet(workbook, worksheet, sheetName);
+    }
+
+    // Generar buffer
+    const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+    
+    const totalProducts = products.length;
+    const totalValue = products.reduce((sum, p) => sum + (p.stock * p.purchasePrice), 0);
+
+    return {
+      success: true,
+      data: {
+        buffer,
+        filename: `inventario_fisico_${new Date().toISOString().split('T')[0]}.xlsx`,
+        totalProducts,
+        totalValue: Math.round(totalValue * 100) / 100,
+        format: 'excel',
+        groupBy,
+      }
+    };
+  }
+
+  private async generateInventoryPDF(products: any[], options: any) {
+    try {
+      console.log('🔄 Iniciando generación de PDF...');
+      const puppeteer = require('puppeteer');
+      const { 
+        includePhysicalCountColumns = false, 
+        includeStockValue = false, 
+        includeImages = false,
+        groupBy = 'none' 
+      } = options;
+
+      console.log('📊 Agrupando productos...');
+      // Agrupar productos si es necesario
+      const groupedData = this.groupProducts(products, groupBy);
+
+      // Generar HTML para el PDF
+      let htmlContent = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="utf-8">
+          <title>Inventario Físico</title>
+          <style>
+            body { 
+              font-family: Arial, sans-serif; 
+              font-size: 10px; 
+              margin: 20px;
+              color: #333;
+            }
+            .header { 
+              text-align: center; 
+              margin-bottom: 30px; 
+              border-bottom: 2px solid #333;
+              padding-bottom: 15px;
+            }
+            .header h1 { 
+              margin: 0; 
+              font-size: 24px; 
+              color: #2c3e50;
+            }
+            .header .subtitle { 
+              margin: 5px 0 0 0; 
+              font-size: 14px; 
+              color: #7f8c8d;
+            }
+            .summary { 
+              background: #f8f9fa; 
+              padding: 15px; 
+              margin-bottom: 20px; 
+              border-radius: 5px;
+              border-left: 4px solid #3498db;
+            }
+            .group-header { 
+              background: #3498db; 
+              color: white; 
+              padding: 8px 12px; 
+              margin: 20px 0 10px 0; 
+              font-weight: bold; 
+              font-size: 12px;
+              border-radius: 3px;
+            }
+            table { 
+              width: 100%; 
+              border-collapse: collapse; 
+              margin-bottom: 20px;
+              box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+            }
+            th { 
+              background: #34495e; 
+              color: white; 
+              padding: 8px 4px; 
+              text-align: left; 
+              font-size: 9px;
+              font-weight: bold;
+            }
+            td { 
+              padding: 6px 4px; 
+              border-bottom: 1px solid #bdc3c7;
+              font-size: 9px;
+            }
+            tr:nth-child(even) { 
+              background: #ecf0f1; 
+            }
+            .code { 
+              font-family: monospace; 
+              font-weight: bold;
+              color: #2980b9;
+            }
+            .stock-low { 
+              color: #e74c3c; 
+              font-weight: bold; 
+            }
+            .stock-good { 
+              color: #27ae60; 
+            }
+            .physical-count { 
+              border: 1px solid #95a5a6; 
+              min-height: 20px; 
+              background: #fff;
+            }
+            .footer { 
+              margin-top: 30px; 
+              text-align: center; 
+              font-size: 8px; 
+              color: #7f8c8d;
+              border-top: 1px solid #bdc3c7;
+              padding-top: 10px;
+            }
+            .page-break { 
+              page-break-before: always; 
+            }
+            @media print {
+              body { margin: 10px; }
+              .page-break { page-break-before: always; }
+            }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <h1>📋 Inventario Físico</h1>
+            <div class="subtitle">Generado el ${new Date().toLocaleDateString('es-ES', { 
+              year: 'numeric', 
+              month: 'long', 
+              day: 'numeric',
+              hour: '2-digit',
+              minute: '2-digit'
+            })}</div>
+          </div>
+
+          <div class="summary">
+            <strong>Resumen:</strong> ${products.length} productos para inventariar
+            ${groupBy !== 'none' ? ` | Agrupado por ${groupBy === 'category' ? 'categoría' : 'proveedor'}` : ''}
+            ${includePhysicalCountColumns ? ' | Incluye columnas para conteo físico' : ''}
+          </div>
+      `;
+
+      // Procesar cada grupo
+      Object.entries(groupedData).forEach(([groupName, groupProducts]: [string, any]) => {
+        if (groupName !== 'Todos' && groupBy !== 'none') {
+          htmlContent += `<div class="group-header">${groupName}</div>`;
+        }
+
+        htmlContent += `
+          <table>
+            <thead>
+              <tr>
+                <th style="width: 30px;">N°</th>
+                <th style="width: 60px;">Código</th>
+                <th style="width: 200px;">Producto</th>
+                <th style="width: 80px;">Categoría</th>
+                <th style="width: 40px;">Unidad</th>
+                <th style="width: 50px;">Stock Sistema</th>
+        `;
+
+        if (includePhysicalCountColumns) {
+          htmlContent += `
+                <th style="width: 50px;">Stock Físico</th>
+                <th style="width: 50px;">Diferencia</th>
+                <th style="width: 100px;">Observaciones</th>
+          `;
+        }
+
+        if (includeStockValue) {
+          htmlContent += `
+                <th style="width: 60px;">Precio Unit.</th>
+                <th style="width: 70px;">Valor Total</th>
+          `;
+        }
+
+        htmlContent += `
+              </tr>
+            </thead>
+            <tbody>
+        `;
+
+        groupProducts.forEach((product: any, index: number) => {
+          const stockClass = product.stock <= (product.stockMin || 5) ? 'stock-low' : 'stock-good';
+          const inventoryValue = product.stock * product.purchasePrice;
+
+          htmlContent += `
+            <tr>
+              <td>${index + 1}</td>
+              <td class="code">P${product.id.toString().padStart(4, '0')}</td>
+              <td><strong>${product.name}</strong></td>
+              <td>${product.category.name}</td>
+              <td>${product.unit.symbol || product.unit.name}</td>
+              <td class="${stockClass}">${product.stock}</td>
+          `;
+
+          if (includePhysicalCountColumns) {
+            htmlContent += `
+              <td class="physical-count"></td>
+              <td class="physical-count"></td>
+              <td class="physical-count"></td>
+            `;
+          }
+
+          if (includeStockValue) {
+            htmlContent += `
+              <td>$${product.salePrice.toLocaleString()}</td>
+              <td>$${Math.round(inventoryValue * 100) / 100}</td>
+            `;
+          }
+
+          htmlContent += `</tr>`;
+        });
+
+        htmlContent += `
+            </tbody>
+          </table>
+        `;
+      });
+
+      // Agregar pie de página
+      htmlContent += `
+          <div class="footer">
+            <p><strong>Instrucciones:</strong></p>
+            <p>1. Contar físicamente cada producto listado</p>
+            <p>2. Anotar el stock físico en la columna correspondiente</p>
+            <p>3. Calcular diferencias (Stock Físico - Stock Sistema)</p>
+            <p>4. Anotar observaciones sobre productos dañados, vencidos, etc.</p>
+            <br>
+            <p>Documento generado automáticamente el ${new Date().toLocaleString('es-ES')}</p>
+          </div>
+        </body>
+        </html>
+      `;
+
+      console.log('🌐 Iniciando Puppeteer...');
+      // Generar PDF con Puppeteer
+      const browser = await puppeteer.launch({
+        headless: true,
+        args: [
+          '--no-sandbox', 
+          '--disable-setuid-sandbox',
+          '--disable-dev-shm-usage',
+          '--disable-accelerated-2d-canvas',
+          '--no-first-run',
+          '--no-zygote',
+          '--disable-gpu'
+        ]
+      });
+      
+      console.log('📄 Creando página y generando PDF...');
+      const page = await browser.newPage();
+      await page.setContent(htmlContent, { waitUntil: 'domcontentloaded' }); // Cambiar a domcontentloaded para ser más rápido
+      
+      const pdfBuffer = await page.pdf({
+        format: 'A4',
+        margin: { top: '20px', right: '20px', bottom: '20px', left: '20px' },
+        printBackground: true,
+        preferCSSPageSize: true,
+      });
+
+      console.log('🔒 Cerrando browser...');
+      await browser.close();
+      console.log('✅ PDF generado exitosamente');
+
+      const totalProducts = products.length;
+      const totalValue = products.reduce((sum, p) => sum + (p.stock * p.purchasePrice), 0);
+
+      return {
+        success: true,
+        data: {
+          buffer: pdfBuffer,
+          filename: `inventario_fisico_${new Date().toISOString().split('T')[0]}.pdf`,
+          totalProducts,
+          totalValue: Math.round(totalValue * 100) / 100,
+          format: 'pdf',
+          groupBy,
+        }
+      };
+
+    } catch (error) {
+      console.error('Error generando PDF:', error);
+      return {
+        success: false,
+        error: 'Error al generar PDF: ' + error.message
+      };
+    }
+  }
+
+  private async generateInventoryCSV(products: any[], options: any) {
+    const csvData = products.map((product, index) => ({
+      'N°': index + 1,
+      'Código': `P${product.id.toString().padStart(4, '0')}`,
+      'Nombre': product.name,
+      'Categoría': product.category.name,
+      'Stock Sistema': product.stock,
+      'Stock Físico': '',
+      'Diferencia': '',
+      'Precio': product.salePrice,
+      'Valor': product.stock * product.purchasePrice,
+    }));
+
+    // Convertir a CSV
+    const headers = Object.keys(csvData[0]);
+    const csvContent = [
+      headers.join(','),
+      ...csvData.map(row => headers.map(h => `"${row[h] || ''}"`).join(','))
+    ].join('\n');
+
+    const buffer = Buffer.from(csvContent, 'utf-8');
+
+    return {
+      success: true,
+      data: {
+        buffer,
+        filename: `inventario_fisico_${new Date().toISOString().split('T')[0]}.csv`,
+        totalProducts: products.length,
+        format: 'csv',
+      }
+    };
+  }
+
+  private groupProducts(products: any[], groupBy: string) {
+    if (groupBy === 'none' || !groupBy) {
+      return { 'Todos': products };
+    }
+
+    const grouped: { [key: string]: any[] } = {};
+
+    products.forEach(product => {
+      let key = 'Sin Grupo';
+      
+      switch (groupBy) {
+        case 'category':
+          key = product.category?.name || 'Sin Categoría';
+          break;
+        case 'supplier':
+          key = product.supplier?.name || 'Sin Proveedor';
+          break;
+        case 'location':
+          key = product.location || 'Sin Ubicación';
+          break;
+      }
+
+      if (!grouped[key]) {
+        grouped[key] = [];
+      }
+      grouped[key].push(product);
+    });
+
+    return grouped;
   }
 
   async bulkUploadProducts(file: Express.Multer.File, withSupplier: boolean = false) {
@@ -1175,6 +1732,150 @@ export class ProductsService {
         error: error.message,
         data: null
       };
+    }
+  }
+
+  // Métodos para códigos de barras
+  async findByBarcode(barcode: string) {
+    try {
+      console.log('🔍 Buscando producto con código:', barcode);
+      
+      const product = await this.prisma.product.findFirst({
+        where: {
+          barcode: barcode,
+          isActive: true
+        },
+        include: {
+          category: true,
+          unit: true,
+          supplier: true,
+        },
+      });
+
+      if (!product) {
+        console.log('❌ Producto no encontrado con código:', barcode);
+        return null;
+      }
+
+      console.log('✅ Producto encontrado:', product.name);
+      return product;
+    } catch (error) {
+      console.error('Error buscando producto por código de barras:', error);
+      throw error;
+    }
+  }
+
+  async generateBarcode(productId: number) {
+    try {
+      console.log('🏷️ Generando código de barras para producto ID:', productId);
+      
+      // Verificar que el producto existe
+      const existingProduct = await this.prisma.product.findUnique({
+        where: { id: productId },
+      });
+
+      if (!existingProduct) {
+        throw new Error('Producto no encontrado');
+      }
+
+      // Si ya tiene código de barras, retornarlo
+      if (existingProduct.barcode) {
+        console.log('📋 Producto ya tiene código de barras:', existingProduct.barcode);
+        return existingProduct;
+      }
+
+      // Generar nuevo código de barras usando el ID del producto
+      // Formato: Prefijo (77) + ID del producto (5 dígitos) + dígito de verificación
+      const prefix = '77'; // Prefijo personalizado para la perfumería
+      const productIdStr = productId.toString().padStart(5, '0');
+      
+      // Calcular dígito de verificación simple
+      const digits = (prefix + productIdStr).split('').map(Number);
+      const checksum = digits.reduce((sum, digit, index) => {
+        return sum + digit * (index % 2 === 0 ? 1 : 3);
+      }, 0);
+      const checkDigit = (10 - (checksum % 10)) % 10;
+      
+      const newBarcode = prefix + productIdStr + checkDigit;
+
+      // Verificar que no exista ese código
+      const existingBarcode = await this.prisma.product.findFirst({
+        where: { barcode: newBarcode },
+      });
+
+      if (existingBarcode) {
+        throw new Error('Código de barras ya existe, intente regenerar');
+      }
+
+      // Actualizar el producto con el nuevo código
+      const updatedProduct = await this.prisma.product.update({
+        where: { id: productId },
+        data: { barcode: newBarcode },
+        include: {
+          category: true,
+          unit: true,
+          supplier: true,
+        },
+      });
+
+      console.log('✅ Código de barras generado:', newBarcode);
+      return updatedProduct;
+    } catch (error) {
+      console.error('Error generando código de barras:', error);
+      throw error;
+    }
+  }
+
+  async generateBarcodeForAllProducts() {
+    try {
+      console.log('🏷️ Generando códigos de barras para todos los productos sin código...');
+      
+      const productsWithoutBarcode = await this.prisma.product.findMany({
+        where: {
+          barcode: null,
+          isActive: true
+        },
+      });
+
+      console.log(`📊 Productos sin código de barras: ${productsWithoutBarcode.length}`);
+
+      const results: Array<{
+        success: boolean;
+        productId: number;
+        productName: string;
+        barcode?: string | null;
+        error?: string;
+      }> = [];
+      
+      for (const product of productsWithoutBarcode) {
+        try {
+          const updatedProduct = await this.generateBarcode(product.id);
+          results.push({
+            success: true,
+            productId: product.id,
+            productName: product.name,
+            barcode: updatedProduct.barcode
+          });
+        } catch (error) {
+          results.push({
+            success: false,
+            productId: product.id,
+            productName: product.name,
+            error: error.message
+          });
+        }
+      }
+
+      return {
+        success: true,
+        processed: results.length,
+        successful: results.filter(r => r.success).length,
+        failed: results.filter(r => !r.success).length,
+        results
+      };
+    } catch (error) {
+      console.error('Error generando códigos masivos:', error);
+      throw error;
     }
   }
 }
