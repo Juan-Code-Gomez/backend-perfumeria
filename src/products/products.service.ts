@@ -1160,12 +1160,34 @@ export class ProductsService {
       const detalles: any[] = [];
 
       for (const row of comprasPorProveedor[proveedorNombre]) {
-        // Validar campos obligatorios
-        if (!row['Nombre producto'] || !row['Categoría'] || !row['Unidad']) {
+        // Validar campos obligatorios - permite cualquier valor válido incluyendo números
+        const nombreProductoValue = row['Nombre producto'];
+        const categoriaValue = row['Categoría'];
+        const unidadValue = row['Unidad'];
+        
+        if (nombreProductoValue === undefined || nombreProductoValue === null || nombreProductoValue.toString().trim() === '') {
           errores.push({
             fila: row._fila,
-            error:
-              'Faltan campos obligatorios (Nombre producto, Categoría o Unidad)',
+            error: 'Falta el nombre del producto',
+            detalle: 'El campo "Nombre producto" es obligatorio'
+          });
+          continue;
+        }
+        
+        if (!categoriaValue || categoriaValue.toString().trim() === '') {
+          errores.push({
+            fila: row._fila,
+            error: 'Falta la categoría del producto',
+            detalle: 'El campo "Categoría" es obligatorio'
+          });
+          continue;
+        }
+        
+        if (!unidadValue || unidadValue.toString().trim() === '') {
+          errores.push({
+            fila: row._fila,
+            error: 'Falta la unidad del producto',
+            detalle: 'El campo "Unidad" es obligatorio'
           });
           continue;
         }
@@ -1348,15 +1370,19 @@ export class ProductsService {
 
       console.log(`Procesando fila ${fila}: ${row['Nombre producto']}`);
       
-      // Validar campos obligatorios específicos (sin proveedor)
+      // Validar campos obligatorios específicos (sin proveedor) - permite cualquier valor válido incluyendo números
       const camposFaltantes: string[] = [];
-      if (!row['Nombre producto'] || row['Nombre producto'].toString().trim() === '') {
+      const nombreProductoValue = row['Nombre producto'];
+      const categoriaValue = row['Categoría'];
+      const unidadValue = row['Unidad'];
+      
+      if (nombreProductoValue === undefined || nombreProductoValue === null || nombreProductoValue.toString().trim() === '') {
         camposFaltantes.push('Nombre producto');
       }
-      if (!row['Categoría'] || row['Categoría'].toString().trim() === '') {
+      if (!categoriaValue || categoriaValue.toString().trim() === '') {
         camposFaltantes.push('Categoría');
       }
-      if (!row['Unidad'] || row['Unidad'].toString().trim() === '') {
+      if (!unidadValue || unidadValue.toString().trim() === '') {
         camposFaltantes.push('Unidad');
       }
       
