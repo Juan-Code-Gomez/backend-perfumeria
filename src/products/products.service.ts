@@ -1279,10 +1279,10 @@ export class ProductsService {
           continue;
         }
 
-        // Buscar producto por nombre + categoría + unidad
+        // Buscar producto por nombre + categoría + unidad (convertir nombre a string)
         const producto = await this.prisma.product.findFirst({
           where: {
-            name: row['Nombre producto'],
+            name: row['Nombre producto'].toString().trim(),
             categoryId: categoria.id,
             unitId: unidad.id,
           },
@@ -1299,10 +1299,10 @@ export class ProductsService {
           productoId = producto.id;
           productosActualizados++;
         } else {
-          // Crear producto
+          // Crear producto (convertir nombre a string)
           const nuevo = await this.prisma.product.create({
             data: {
-              name: row['Nombre producto'],
+              name: row['Nombre producto'].toString().trim(),
               description: row['Descripción'] || '',
               purchasePrice: precioCompra,
               salePrice: precioVenta,
@@ -1515,10 +1515,10 @@ export class ProductsService {
         console.log(`⚠️ Usando precio de compra como precio de venta para "${row['Nombre producto']}"`);
       }
 
-      // Buscar producto por nombre + categoría + unidad
+      // Buscar producto por nombre + categoría + unidad (convertir nombre a string)
       const producto = await this.prisma.product.findFirst({
         where: {
-          name: row['Nombre producto'],
+          name: row['Nombre producto'].toString().trim(),
           categoryId: categoria.id,
           unitId: unidad.id,
         },
@@ -1539,10 +1539,10 @@ export class ProductsService {
         });
         productosActualizados++;
       } else {
-        // Crear producto sin proveedor
+        // Crear producto sin proveedor (convertir nombre a string)
         await this.prisma.product.create({
           data: {
-            name: row['Nombre producto'],
+            name: row['Nombre producto'].toString().trim(),
             description: row['Descripción'] || '',
             purchasePrice: precioCompra > 0 ? precioCompra : 0, // Usar 0 en lugar de null
             salePrice: precioVenta,
