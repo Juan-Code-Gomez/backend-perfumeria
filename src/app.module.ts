@@ -27,6 +27,7 @@ import { NotificationsModule } from './notifications/notifications.module';
 import { InventoryAutomationModule } from './inventory-automation/inventory-automation.module';
 import { CompanyConfigModule } from './company-config/company-config.module';
 import { PermissionsModule } from './permissions/permissions.module';
+import { SystemParametersModule } from './system-parameters/system-parameters.module';
 
 @Module({
   imports: [
@@ -56,6 +57,7 @@ import { PermissionsModule } from './permissions/permissions.module';
     InventoryAutomationModule,
     CompanyConfigModule,
     PermissionsModule,
+    SystemParametersModule,
   ],
   controllers: [AppController],
   providers: [AppService],

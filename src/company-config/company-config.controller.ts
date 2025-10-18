@@ -106,14 +106,14 @@ export class CompanyConfigController {
 
   @Put('current')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('ADMIN')
+  @Roles('ADMIN', 'SUPER_ADMIN')
   updateCurrent(@Body() updateCompanyConfigDto: UpdateCompanyConfigDto) {
     return this.companyConfigService.updateCurrent(updateCompanyConfigDto);
   }
 
   @Put(':id')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('ADMIN')
+  @Roles('ADMIN', 'SUPER_ADMIN')
   update(
     @Param('id', ParseIntPipe) id: number,
     @Body() updateCompanyConfigDto: UpdateCompanyConfigDto,

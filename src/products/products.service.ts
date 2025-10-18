@@ -1418,10 +1418,11 @@ export class ProductsService {
         continue;
       }
 
-      // Buscar unidad
-      console.log(`Buscando unidad: "${row['Unidad']}"`);
+      // Buscar unidad (trim para evitar problemas con espacios)
+      const unidadName = row['Unidad']?.toString().trim();
+      console.log(`Buscando unidad: "${unidadName}"`);
       const unidad = await this.prisma.unit.findFirst({
-        where: { name: row['Unidad'] },
+        where: { name: unidadName },
       });
       if (!unidad) {
         // Obtener unidades disponibles para sugerir
@@ -1433,7 +1434,7 @@ export class ProductsService {
         errores.push({
           fila,
           producto: row['Nombre producto'],
-          error: `Unidad "${row['Unidad']}" no existe en el sistema`,
+          error: `Unidad "${unidadName}" no existe en el sistema`,
           detalle: 'Unidades disponibles: ' + unidadesDisponibles.map(u => u.name).join(', '),
           solucion: 'Debe usar una unidad existente o crear la unidad en el sistema primero'
         });
