@@ -5,6 +5,7 @@ import { SimpleCapitalService } from '../services/simple-capital.service';
 import { CreateSaleDto } from './dto/create-sale.dto';
 import { CreateSalePaymentDto } from './dto/create-sale-payment.dto';
 import { CreateCreditNoteDto } from './dto/create-credit-note.dto';
+import { parseLocalDate, startOfDay, endOfDay } from '../common/utils/timezone.util';
 const PDFDocument = require('pdfkit');
 const fs = require('fs');
 const path = require('path');
@@ -83,7 +84,7 @@ export class SaleService {
 
       const sale = await tx.sale.create({
         data: {
-          date: data.date ? new Date(data.date) : new Date(),
+          date: data.date ? parseLocalDate(data.date) : new Date(),
           customerName: data.customerName,
           clientId: data.clientId,
           totalAmount: data.totalAmount,
@@ -199,17 +200,19 @@ export class SaleService {
 
     if (dateFrom && dateTo) {
       where.date = {
-        gte: new Date(`${dateFrom}T00:00:00.000Z`),
-        lte: new Date(`${dateTo}T23:59:59.999Z`),
+        gte: startOfDay(dateFrom),
+        lte: endOfDay(dateTo),
       };
     } else {
       const today = new Date();
       const y = today.getFullYear();
       const m = String(today.getMonth() + 1).padStart(2, '0');
       const d = String(today.getDate()).padStart(2, '0');
-      const start = new Date(`${y}-${m}-${d}T00:00:00.000Z`);
-      const end = new Date(`${y}-${m}-${d}T23:59:59.999Z`);
-      where.date = { gte: start, lte: end };
+      const todayStr = `${y}-${m}-${d}`;
+      where.date = { 
+        gte: startOfDay(todayStr), 
+        lte: endOfDay(todayStr) 
+      };
     }
 
     const ventas = await this.prisma.sale.findMany({
@@ -623,8 +626,8 @@ export class SaleService {
 
     if (filters.dateFrom && filters.dateTo) {
       where.date = {
-        gte: new Date(`${filters.dateFrom}T00:00:00.000Z`),
-        lte: new Date(`${filters.dateTo}T23:59:59.999Z`),
+        gte: startOfDay(filters.dateFrom),
+        lte: endOfDay(filters.dateTo),
       };
     } else {
       // Por defecto último mes

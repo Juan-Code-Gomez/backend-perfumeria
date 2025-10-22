@@ -3,6 +3,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CapitalAutoService } from '../services/capital-auto.service';
 import { CreateExpenseDto, UpdateExpenseDto } from './dto/create-expense.dto';
 import { ExpenseCategory } from '@prisma/client';
+import { parseLocalDate, startOfDay, endOfDay } from '../common/utils/timezone.util';
 
 interface FindAllOpts {
   dateFrom?: string;
@@ -28,15 +29,8 @@ export class ExpenseService {
   ) {}
 
   async create(dto: CreateExpenseDto) {
-    // Crear fecha local sin interpretación UTC
-    let date: Date;
-    if (dto.date) {
-      const dateStr = dto.date.toString();
-      const parts = dateStr.split('-');
-      date = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
-    } else {
-      date = new Date();
-    }
+    // Usar utilidad de timezone para parsear correctamente la fecha
+    const date = dto.date ? parseLocalDate(dto.date) : new Date();
     
     const expense = await this.prisma.expense.create({
       data: {
@@ -69,7 +63,10 @@ export class ExpenseService {
     const where: any = { deletedAt: null };
 
     if (opts.dateFrom && opts.dateTo) {
-      where.date = { gte: new Date(opts.dateFrom), lte: new Date(opts.dateTo) };
+      where.date = { 
+        gte: startOfDay(opts.dateFrom), 
+        lte: endOfDay(opts.dateTo) 
+      };
     }
 
     if (opts.category) where.category = opts.category;
@@ -103,7 +100,10 @@ export class ExpenseService {
   async getSummary(opts: SummaryOpts) {
     const where: any = { deletedAt: null };
     if (opts.dateFrom && opts.dateTo) {
-      where.date = { gte: new Date(opts.dateFrom), lte: new Date(opts.dateTo) };
+      where.date = { 
+        gte: startOfDay(opts.dateFrom), 
+        lte: endOfDay(opts.dateTo) 
+      };
     }
     
     // Total general
@@ -181,11 +181,9 @@ export class ExpenseService {
     
     let updateData: any = { ...dto };
     
-    // Manejar la fecha si viene en el DTO
+    // Usar utilidad de timezone para parsear correctamente la fecha
     if (dto.date) {
-      const dateStr = dto.date.toString();
-      const parts = dateStr.split('-');
-      updateData.date = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+      updateData.date = parseLocalDate(dto.date);
     }
     
     return this.prisma.expense.update({

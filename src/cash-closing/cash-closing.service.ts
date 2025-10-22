@@ -1,14 +1,13 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateCashClosingDto } from './dto/create-cash-closing.dto';
+import { parseLocalDate, startOfDay as getStartOfDay, endOfDay as getEndOfDay } from '../common/utils/timezone.util';
 
 @Injectable()
 export class CashClosingService {
   constructor(private prisma: PrismaService) {}
 
   async create(data: CreateCashClosingDto, userId?: number) {
-    let date: Date;
-    
     try {
       console.log(`📥 Received cash closing data:`, {
         date: data.date,
@@ -16,30 +15,15 @@ export class CashClosingService {
         closingCash: data.closingCash
       });
 
-      // Manejo mejorado de fechas - evitar problemas de zona horaria
-      if (data.date) {
-        const dateStr = data.date.toString();
-        console.log(`📅 Processing date string: ${dateStr}`);
-        
-        // Crear fecha en zona horaria local sin conversión UTC
-        if (dateStr.includes('T')) {
-          // Si viene con hora, usar directamente
-          date = new Date(dateStr);
-        } else {
-          // Si es solo fecha (YYYY-MM-DD), crear explícitamente en local
-          const [year, month, day] = dateStr.split('-').map(Number);
-          date = new Date(year, month - 1, day, 12, 0, 0, 0); // Usar mediodía para evitar cambios de día
-        }
-      } else {
-        date = new Date();
-      }
+      // Usar utilidades de timezone para parsear correctamente
+      const date = data.date ? parseLocalDate(data.date) : new Date();
 
       console.log(`🎯 Parsed date object: ${date.toISOString()}`);
       console.log(`🌍 Local date representation: ${date.toLocaleDateString()} ${date.toLocaleTimeString()}`);
 
-      // Calcular rango del día en zona horaria local
-      const startOfDay = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 0, 0, 0, 0);
-      const endOfDay = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 23, 59, 59, 999);
+      // Calcular rango del día usando utilidades
+      const startOfDay = getStartOfDay(date.toISOString().split('T')[0]);
+      const endOfDay = getEndOfDay(date.toISOString().split('T')[0]);
 
       console.log(`🕐 Date range (Local): ${startOfDay.toISOString()} to ${endOfDay.toISOString()}`);
 

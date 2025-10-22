@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreatePurchaseDto } from './dto/create-purchase.dto';
+import { parseLocalDate } from '../common/utils/timezone.util';
 
 @Injectable()
 export class PurchaseService {
@@ -15,7 +16,7 @@ export class PurchaseService {
       const purchase = await tx.purchase.create({
         data: {
           supplierId: data.supplierId,
-          date: data.date,
+          date: data.date ? parseLocalDate(data.date) : new Date(),
           totalAmount: data.totalAmount,
           paidAmount: data.paidAmount,
           isPaid,
