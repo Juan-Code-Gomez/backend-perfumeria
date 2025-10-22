@@ -16,7 +16,7 @@ Permite a ciertos clientes registrar ventas con **fechas personalizadas**, ideal
   - ❌ Requiere permiso explícito del sistema
   - ✅ Registra auditoría de uso
 
----
+---d
 
 ## 🚀 Cómo Activar (SUPER_ADMIN)
 
