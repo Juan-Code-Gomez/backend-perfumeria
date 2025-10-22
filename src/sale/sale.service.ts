@@ -1,7 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { ComboService } from '../services/combo.service';
 import { SimpleCapitalService } from '../services/simple-capital.service';
+import { SystemParametersService } from '../system-parameters/system-parameters.service';
 import { CreateSaleDto } from './dto/create-sale.dto';
 import { CreateSalePaymentDto } from './dto/create-sale-payment.dto';
 import { CreateCreditNoteDto } from './dto/create-credit-note.dto';
@@ -16,10 +17,36 @@ export class SaleService {
     private prisma: PrismaService,
     private comboService: ComboService,
     private capitalService: SimpleCapitalService,
+    private systemParametersService: SystemParametersService,
   ) {}
 
   async create(data: CreateSaleDto) {
     console.log('📝 Sale service - Datos recibidos:', JSON.stringify(data, null, 2));
+    
+    // Validar si se permite fecha manual
+    if (data.date) {
+      const isManualDateAllowed = await this.systemParametersService.isManualSaleDateEnabled();
+      
+      if (!isManualDateAllowed) {
+        throw new BadRequestException(
+          'La selección manual de fecha no está habilitada. ' +
+          'Contacte al administrador si necesita registrar ventas históricas.'
+        );
+      }
+      
+      // Validar que la fecha no sea futura
+      const saleDate = parseLocalDate(data.date);
+      const today = new Date();
+      today.setHours(23, 59, 59, 999);
+      
+      if (saleDate > today) {
+        throw new BadRequestException(
+          'No se pueden registrar ventas con fecha futura'
+        );
+      }
+      
+      console.log('✅ Fecha manual permitida:', saleDate.toLocaleDateString());
+    }
     
     let isPaid = data.isPaid ?? false;
     let paidAmount = Number(data.paidAmount) || 0;

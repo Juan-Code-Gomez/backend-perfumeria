@@ -207,6 +207,13 @@ export class SystemParametersService {
   }
 
   /**
+   * Nuevo: Verificar si se permite seleccionar fecha manual en ventas
+   */
+  async isManualSaleDateEnabled(companyId?: number): Promise<boolean> {
+    return this.getBooleanParameter('allow_manual_sale_date', companyId, false);
+  }
+
+  /**
    * Limpiar cache
    */
   private clearCache(key: string, companyId?: number): void {
@@ -233,11 +240,13 @@ export class SystemParametersService {
       showProfitMargin,
       requireCustomer,
       negativeStockAllowed,
+      allowManualSaleDate,
     ] = await Promise.all([
       this.isPosEditCostEnabled(companyId),
       this.isProfitMarginVisible(companyId),
       this.getBooleanParameter('sales_require_customer', companyId, false),
       this.getBooleanParameter('inventory_negative_stock', companyId, false),
+      this.isManualSaleDateEnabled(companyId),
     ]);
 
     return {
@@ -245,6 +254,7 @@ export class SystemParametersService {
       showProfitMargin,
       requireCustomer,
       negativeStockAllowed,
+      allowManualSaleDate,
     };
   }
 }

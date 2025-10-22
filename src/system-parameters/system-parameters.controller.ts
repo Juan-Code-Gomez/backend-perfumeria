@@ -245,6 +245,27 @@ export class SystemParametersController {
   }
 
   /**
+   * Verificar si se permite seleccionar fecha manual en ventas
+   */
+  @Get('pos/manual-sale-date-enabled')
+  async isManualSaleDateEnabled(@Query('companyId') companyId?: string) {
+    try {
+      const enabled = await this.systemParametersService.isManualSaleDateEnabled(
+        companyId ? parseInt(companyId) : undefined
+      );
+      return {
+        success: true,
+        enabled,
+      };
+    } catch (error) {
+      throw new HttpException(
+        `Error al verificar configuración de fecha manual: ${error.message}`,
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  /**
    * Inicializar parámetros por defecto (solo super admin)
    */
   @Post('initialize')
@@ -264,6 +285,12 @@ export class SystemParametersController {
           parameterValue: true,
           description: 'Mostrar margen de ganancia en tiempo real en POS',
           category: 'pos'
+        },
+        {
+          parameterKey: 'allow_manual_sale_date',
+          parameterValue: false,
+          description: 'Permite seleccionar fecha manual al registrar ventas (para migración de datos históricos)',
+          category: 'sales'
         },
         {
           parameterKey: 'audit_track_cost_changes',
