@@ -605,7 +605,7 @@ enum NotificationFrequency {
 
 model SystemParameter {
   id            Int      @id @default(autoincrement())
-  companyId     Int?     // Para multi-tenant en el futuro
+  companyId     Int?     @map("company_id") // Para multi-tenant en el futuro
   parameterKey  String   @unique @map("parameter_key")
   parameterValue Boolean @default(false) @map("parameter_value")
   parameterType String   @default("boolean") @map("parameter_type")
