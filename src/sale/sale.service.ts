@@ -3,6 +3,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { ComboService } from '../services/combo.service';
 import { SimpleCapitalService } from '../services/simple-capital.service';
 import { SystemParametersService } from '../system-parameters/system-parameters.service';
+import { ProductBatchService } from '../product-batch/product-batch.service';
 import { CreateSaleDto } from './dto/create-sale.dto';
 import { CreateSalePaymentDto } from './dto/create-sale-payment.dto';
 import { CreateCreditNoteDto } from './dto/create-credit-note.dto';
@@ -18,6 +19,7 @@ export class SaleService {
     private comboService: ComboService,
     private capitalService: SimpleCapitalService,
     private systemParametersService: SystemParametersService,
+    private batchService: ProductBatchService,
   ) {}
 
   async create(data: CreateSaleDto) {
@@ -78,36 +80,51 @@ export class SaleService {
       // Crear un mapa para acceso rápido a precios
       const productMap = new Map(products.map(p => [p.id, p]));
 
-      // Preparar detalles con cálculos de rentabilidad
-      const detailsWithProfit = data.details.map((d) => {
-        const product = productMap.get(d.productId);
-        if (!product) {
-          throw new Error(`Producto con ID ${d.productId} no encontrado`);
-        }
+      // Preparar detalles con cálculos de rentabilidad usando FIFO
+      const detailsWithProfit = await Promise.all(
+        data.details.map(async (d) => {
+          const product = productMap.get(d.productId);
+          if (!product) {
+            throw new Error(`Producto con ID ${d.productId} no encontrado`);
+          }
 
-        const unitPrice = Number(d.unitPrice);
-        const quantity = Number(d.quantity);
-        const purchasePrice = d.purchasePrice || product.purchasePrice;
-        const suggestedPrice = d.suggestedPrice || product.salePrice;
-        
-        // Cálculos de rentabilidad
-        const totalPrice = quantity * unitPrice;
-        const profitAmount = unitPrice - purchasePrice;
-        const profitMargin = purchasePrice > 0 ? (profitAmount / purchasePrice) * 100 : 0;
+          const unitPrice = Number(d.unitPrice);
+          const quantity = Number(d.quantity);
+          const suggestedPrice = d.suggestedPrice || product.salePrice;
+          
+          // 🔥 USAR FIFO PARA OBTENER EL COSTO REAL
+          let purchasePrice = d.purchasePrice || product.purchasePrice; // Fallback al costo genérico
+          let realCost = purchasePrice;
+          
+          try {
+            // Intentar consumir lotes usando FIFO
+            const fifoResult = await this.batchService.consumeBatchesFIFO(d.productId, quantity);
+            realCost = fifoResult.averageCost; // Usar el costo promedio FIFO
+            console.log(`🎯 FIFO: Producto ${d.productId}, Cantidad: ${quantity}, Costo Real: $${realCost.toFixed(2)} (${fifoResult.batchesUsed.length} lotes consumidos)`);
+          } catch (error) {
+            // Si no hay lotes disponibles, usar el costo genérico del producto
+            console.warn(`⚠️ No hay lotes FIFO para producto ${d.productId}, usando costo genérico: $${purchasePrice}`);
+          }
+          
+          // Cálculos de rentabilidad con el costo real FIFO
+          const totalPrice = quantity * unitPrice;
+          const profitAmount = unitPrice - realCost;
+          const profitMargin = realCost > 0 ? (profitAmount / realCost) * 100 : 0;
 
-        console.log(`💰 Rentabilidad para ${product.id}: Venta $${unitPrice} - Compra $${purchasePrice} = Ganancia $${profitAmount.toFixed(2)} (${profitMargin.toFixed(1)}%)`);
+          console.log(`💰 Rentabilidad para ${product.id}: Venta $${unitPrice} - Costo Real $${realCost.toFixed(2)} = Ganancia $${profitAmount.toFixed(2)} (${profitMargin.toFixed(1)}%)`);
 
-        return {
-          productId: d.productId,
-          quantity,
-          unitPrice,
-          totalPrice,
-          purchasePrice,
-          profitAmount,
-          profitMargin,
-          suggestedPrice,
-        };
-      });
+          return {
+            productId: d.productId,
+            quantity,
+            unitPrice,
+            totalPrice,
+            purchasePrice: realCost, // Guardar el costo real FIFO
+            profitAmount,
+            profitMargin,
+            suggestedPrice,
+          };
+        })
+      );
 
       const sale = await tx.sale.create({
         data: {
@@ -782,5 +799,97 @@ export class SaleService {
         margin: Math.round(day.margin * 100) / 100,
       }))
       .sort((a, b) => a.date.localeCompare(b.date));
+  }
+
+  /**
+   * 🗑️ Eliminar una venta y restaurar el inventario
+   * Solo permitido para ADMIN y SUPER_ADMIN
+   */
+  async deleteSale(id: number) {
+    return await this.prisma.$transaction(async (tx) => {
+      // 1️⃣ Buscar la venta con sus detalles
+      const sale = await tx.sale.findUnique({
+        where: { id },
+        include: {
+          details: {
+            include: {
+              product: true
+            }
+          },
+          payments: true,
+        },
+      });
+
+      if (!sale) {
+        throw new NotFoundException(`Venta con ID ${id} no encontrada`);
+      }
+
+      console.log(`🗑️ Eliminando venta #${id} - Total: $${sale.totalAmount}`);
+
+      // 2️⃣ Restaurar el stock de cada producto vendido
+      for (const detail of sale.details) {
+        const product = detail.product;
+        
+        // Si el producto era un combo, restaurar ingredientes
+        if (product.salesType === 'COMBO') {
+          // TODO: Revertir el descuento de ingredientes del combo
+          // await this.comboService.revertComboSale(detail.productId, detail.quantity, sale.id);
+          
+          // También restaurar el stock del combo mismo
+          await tx.product.update({
+            where: { id: detail.productId },
+            data: {
+              stock: {
+                increment: Number(detail.quantity),
+              },
+            },
+          });
+          
+          console.log(`📦 Stock del combo "${product.name}" restaurado: +${detail.quantity} unidades`);
+        } else {
+          // Producto normal: restaurar stock
+          await tx.product.update({
+            where: { id: detail.productId },
+            data: {
+              stock: {
+                increment: Number(detail.quantity),
+              },
+            },
+          });
+          
+          console.log(`📦 Stock de "${product.name}" restaurado: +${detail.quantity} unidades`);
+        }
+      }
+
+      // 3️⃣ Revertir ingresos de capital si la venta estaba pagada
+      // TODO: Implementar revertSale en SimpleCapitalService
+      // if (sale.isPaid || sale.payments.length > 0) {
+      //   try {
+      //     for (const payment of sale.payments) {
+      //       await this.capitalService.revertSale(sale.id, payment.amount, payment.method || 'EFECTIVO');
+      //     }
+      //     console.log(`💰 Ingresos de capital revertidos para venta #${id}`);
+      //   } catch (error) {
+      //     console.error('⚠️ Error al revertir capital:', error);
+      //   }
+      // }
+
+      // 4️⃣ Eliminar la venta (cascade borra SaleDetails y SalePayments automáticamente)
+      await tx.sale.delete({
+        where: { id },
+      });
+
+      console.log(`✅ Venta #${id} eliminada exitosamente`);
+
+      return {
+        success: true,
+        message: `Venta #${id} eliminada y stock restaurado`,
+        restoredProducts: sale.details.map(d => ({
+          productId: d.productId,
+          productName: d.product.name,
+          quantityRestored: d.quantity,
+        })),
+      };
+    });
   }
 }

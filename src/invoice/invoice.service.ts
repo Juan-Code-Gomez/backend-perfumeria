@@ -1,29 +1,202 @@
 // src/invoice/invoice.service.ts
-import { Injectable } from '@nestjs/common';
+import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateInvoiceDto, UpdateInvoiceDto, PayInvoiceDto } from './dto/create-invoice.dto';
+import { ProductBatchService } from '../product-batch/product-batch.service';
+import { parseLocalDate } from '../common/utils/timezone.util';
 
 @Injectable()
 export class InvoiceService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private batchService: ProductBatchService,
+  ) {}
 
+
+  /**
+   * Crea una factura y opcionalmente procesa el inventario
+   * Si processInventory = true:
+   * 1. Crea la factura con items
+   * 2. Crea una compra automática
+   * 3. Crea lotes FIFO para cada producto
+   * 4. Actualiza el stock de productos
+   */
   async create(data: CreateInvoiceDto) {
-    const invoiceData = {
-      ...data,
-      invoiceDate: new Date(data.invoiceDate),
-      dueDate: data.dueDate ? new Date(data.dueDate) : null,
-      paidAmount: data.paidAmount || 0,
-      status: this.calculateStatus(data.amount, data.paidAmount || 0),
-    };
+    const invoiceDate = parseLocalDate(data.invoiceDate);
+    const dueDate = data.dueDate ? parseLocalDate(data.dueDate) : null;
 
-    return this.prisma.invoice.create({ data: invoiceData });
+    // Validar que el proveedor exista
+    const supplier = await this.prisma.supplier.findUnique({
+      where: { id: data.supplierId },
+    });
+
+    if (!supplier) {
+      throw new NotFoundException(`Proveedor con ID ${data.supplierId} no encontrado`);
+    }
+
+    // Validar que todos los productos existan
+    const productIds = data.items.map(item => item.productId);
+    const products = await this.prisma.product.findMany({
+      where: { id: { in: productIds } },
+    });
+
+    if (products.length !== productIds.length) {
+      throw new BadRequestException('Uno o más productos no existen');
+    }
+
+    // Calcular subtotal y total
+    const subtotal = data.items.reduce((sum, item) => 
+      sum + (item.quantity * item.unitCost), 0
+    );
+    const discount = data.discount || 0;
+    const totalAmount = subtotal - discount;
+    const paidAmount = data.paidAmount || 0;
+    const status = this.calculateStatus(totalAmount, paidAmount);
+
+    // Usar transacción para crear todo en bloque
+    return this.prisma.$transaction(async (tx) => {
+      // 1. Crear la factura principal
+      const invoice = await tx.invoice.create({
+        data: {
+          invoiceNumber: data.invoiceNumber,
+          supplierName: supplier.name,
+          supplierId: data.supplierId,
+          amount: totalAmount,
+          paidAmount,
+          status,
+          description: data.description,
+          notes: data.notes,
+          invoiceDate,
+          dueDate,
+          inventoryProcessed: data.processInventory ?? true,
+        },
+      });
+
+      console.log(`📄 Factura #${invoice.id} creada: ${invoice.invoiceNumber}`);
+
+      // 2. Crear los items de la factura
+      const invoiceItems = await Promise.all(
+        data.items.map(async (item) => {
+          return tx.invoiceItem.create({
+            data: {
+              invoiceId: invoice.id,
+              productId: item.productId,
+              description: item.description || products.find(p => p.id === item.productId)?.name || '',
+              quantity: item.quantity,
+              unitPrice: item.unitCost,
+              totalPrice: item.quantity * item.unitCost,
+              affectInventory: true,
+            },
+          });
+        })
+      );
+
+      console.log(`📦 ${invoiceItems.length} items agregados a la factura`);
+
+      // 3. Si debe procesar inventario, crear compra y lotes
+      if (data.processInventory !== false) {
+        // Crear compra automática
+        const purchase = await tx.purchase.create({
+          data: {
+            supplierId: data.supplierId,
+            date: invoiceDate,
+            subtotal,
+            discount,
+            totalAmount,
+            paidAmount,
+            isPaid: paidAmount >= totalAmount,
+            invoiceNumber: data.invoiceNumber,
+            invoiceDate,
+            dueDate,
+            notes: data.notes,
+            details: {
+              create: data.items.map((item) => ({
+                productId: item.productId,
+                quantity: item.quantity,
+                unitCost: item.unitCost,
+                totalCost: item.quantity * item.unitCost,
+              })),
+            },
+          },
+          include: {
+            supplier: true,
+            details: {
+              include: { product: true },
+            },
+          },
+        });
+
+        console.log(`🛒 Compra #${purchase.id} creada automáticamente`);
+
+        // Crear lotes FIFO para cada item
+        await Promise.all(
+          data.items.map(async (item) => {
+            await tx.productBatch.create({
+              data: {
+                productId: item.productId,
+                purchaseId: purchase.id,
+                quantity: item.quantity,
+                remainingQty: item.quantity,
+                unitCost: item.unitCost,
+                purchaseDate: invoiceDate,
+                expiryDate: item.expiryDate ? parseLocalDate(item.expiryDate) : null,
+                batchNumber: item.batchNumber,
+              },
+            });
+            console.log(`📦 Lote creado: Producto ${item.productId}, Cantidad: ${item.quantity}, Costo: $${item.unitCost}`);
+          })
+        );
+
+        // Actualizar stock de productos
+        await Promise.all(
+          data.items.map(async (item) => {
+            await tx.product.update({
+              where: { id: item.productId },
+              data: {
+                stock: { increment: item.quantity },
+              },
+            });
+          })
+        );
+
+        console.log(`✅ Stock actualizado para ${data.items.length} productos`);
+      }
+
+      // Log final
+      console.log(`✅ Factura ${invoice.invoiceNumber} procesada exitosamente:`);
+      console.log(`   Subtotal: $${subtotal.toLocaleString()}`);
+      if (discount > 0) console.log(`   Descuento: -$${discount.toLocaleString()}`);
+      console.log(`   Total: $${totalAmount.toLocaleString()}`);
+      console.log(`   Estado: ${status}`);
+      if (data.processInventory !== false) {
+        console.log(`   ${data.items.length} lotes FIFO creados`);
+      }
+
+      // Retornar factura con relaciones
+      return tx.invoice.findUnique({
+        where: { id: invoice.id },
+        include: {
+          Supplier: true,
+          InvoiceItem: {
+            include: {
+              Product: true,
+            },
+          },
+        },
+      });
+    });
   }
 
-  async findAll(filters?: { status?: string; overdue?: boolean }) {
+
+  async findAll(filters?: { status?: string; overdue?: boolean; supplierId?: number }) {
     const where: any = {};
 
     if (filters?.status) {
       where.status = filters.status;
+    }
+
+    if (filters?.supplierId) {
+      where.supplierId = filters.supplierId;
     }
 
     if (filters?.overdue) {
@@ -37,12 +210,36 @@ export class InvoiceService {
 
     return this.prisma.invoice.findMany({
       where,
-      orderBy: { createdAt: 'desc' },
+      include: {
+        Supplier: true,
+        InvoiceItem: {
+          include: {
+            Product: true,
+          },
+        },
+      },
+      orderBy: { invoiceDate: 'desc' },
     });
   }
 
   async findOne(id: number) {
-    return this.prisma.invoice.findUnique({ where: { id } });
+    const invoice = await this.prisma.invoice.findUnique({
+      where: { id },
+      include: {
+        Supplier: true,
+        InvoiceItem: {
+          include: {
+            Product: true,
+          },
+        },
+      },
+    });
+
+    if (!invoice) {
+      throw new NotFoundException(`Factura con ID ${id} no encontrada`);
+    }
+
+    return invoice;
   }
 
   async update(id: number, data: UpdateInvoiceDto) {

@@ -112,6 +112,7 @@ model Product {
   priceHistory        ProductPrice[]
   PurchaseDetail      PurchaseDetail[]
   SaleDetail          SaleDetail[]
+  batches             ProductBatch[]     @relation("ProductBatches")
 
   @@index([sku])
   @@index([barcode])
@@ -189,16 +190,34 @@ model ProductPrice {
 }
 
 model Purchase {
-  id          Int              @id @default(autoincrement())
-  supplierId  Int
-  date        DateTime         @default(now())
-  totalAmount Float
-  paidAmount  Float
-  isPaid      Boolean          @default(false)
-  createdAt   DateTime         @default(now())
-  updatedAt   DateTime         @updatedAt
-  supplier    Supplier         @relation(fields: [supplierId], references: [id])
-  details     PurchaseDetail[]
+  id            Int              @id @default(autoincrement())
+  supplierId    Int
+  date          DateTime         @default(now())
+  
+  // Campos financieros
+  subtotal      Float            // Suma de (quantity * unitCost)
+  discount      Float            @default(0)
+  totalAmount   Float            // = subtotal - discount
+  paidAmount    Float
+  isPaid        Boolean          @default(false)
+  
+  // Datos de la factura del proveedor (opcionales)
+  invoiceNumber String?          @unique
+  invoiceDate   DateTime?
+  dueDate       DateTime?        // Fecha de vencimiento para pago a crédito
+  
+  // Metadata
+  notes         String?
+  
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+  supplier      Supplier         @relation(fields: [supplierId], references: [id])
+  details       PurchaseDetail[]
+  batches       ProductBatch[]   @relation("PurchaseBatches")
+  
+  @@index([invoiceNumber])
+  @@index([invoiceDate])
+  @@index([dueDate])
 }
 
 model PurchaseDetail {
@@ -448,6 +467,7 @@ model Invoice {
   paidAmount          Float         @default(0)
   status              String        @default("PENDING")
   description         String?
+  notes               String?       // Notas adicionales
   invoiceDate         DateTime
   dueDate             DateTime?
   createdAt           DateTime      @default(now())
@@ -547,7 +567,7 @@ model InvoiceItem {
   profitMargin        Float?
   notes               String?
   createdAt           DateTime @default(now())
-  updatedAt           DateTime
+  updatedAt           DateTime @updatedAt
   Invoice             Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
   Product             Product? @relation(fields: [productId], references: [id])
 
@@ -619,4 +639,27 @@ model SystemParameter {
   updatedAt     DateTime @updatedAt @map("updated_at")
 
   @@map("system_parameters")
+}
+
+model ProductBatch {
+  id            Int      @id @default(autoincrement())
+  productId     Int      @map("product_id")
+  purchaseId    Int?     @map("purchase_id")
+  quantity      Float    // Cantidad inicial del lote
+  remainingQty  Float    @map("remaining_qty") // Cantidad disponible
+  unitCost      Float    @map("unit_cost") // Costo unitario de este lote
+  purchaseDate  DateTime @map("purchase_date") // Fecha de compra (para FIFO)
+  expiryDate    DateTime? @map("expiry_date") // Opcional: fecha de vencimiento
+  batchNumber   String?  @map("batch_number") // Opcional: número de lote del proveedor
+  notes         String?  // Notas adicionales
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+  
+  product       Product  @relation("ProductBatches", fields: [productId], references: [id], onDelete: Cascade)
+  purchase      Purchase? @relation("PurchaseBatches", fields: [purchaseId], references: [id], onDelete: SetNull)
+
+  @@index([productId, purchaseDate]) // Índice compuesto para búsqueda FIFO
+  @@index([productId, remainingQty]) // Índice para buscar lotes con stock
+  @@index([expiryDate]) // Índice para alertas de vencimiento
+  @@map("product_batches")
 }

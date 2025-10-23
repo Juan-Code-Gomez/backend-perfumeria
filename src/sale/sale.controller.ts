@@ -1,8 +1,11 @@
-import { Controller, Get, Post, Body, Param, Query, Res } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Query, Res, Delete, UseGuards } from '@nestjs/common';
 import { SaleService } from './sale.service';
 import { CreateSaleDto } from './dto/create-sale.dto';
 import { CreateSalePaymentDto } from './dto/create-sale-payment.dto';
 import { CreateCreditNoteDto } from './dto/create-credit-note.dto';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../auth/guards/roles.guard';
+import { Roles } from '../auth/decorators/roles.decorator';
 import type { Response } from 'express';
 
 @Controller('sales')
@@ -70,5 +73,13 @@ export class SaleController {
     @Query('dateTo') dateTo?: string,
   ) {
     return this.saleService.getProfitabilityStats({ dateFrom, dateTo });
+  }
+
+  // DELETE /sales/:id - Solo ADMIN y SUPER_ADMIN
+  @Delete(':id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN', 'SUPER_ADMIN')
+  async deleteSale(@Param('id') id: string) {
+    return this.saleService.deleteSale(Number(id));
   }
 }

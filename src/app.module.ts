@@ -28,6 +28,7 @@ import { InventoryAutomationModule } from './inventory-automation/inventory-auto
 import { CompanyConfigModule } from './company-config/company-config.module';
 import { PermissionsModule } from './permissions/permissions.module';
 import { SystemParametersModule } from './system-parameters/system-parameters.module';
+import { ProductBatchModule } from './product-batch/product-batch.module';
 
 @Module({
   imports: [
@@ -58,6 +59,7 @@ import { SystemParametersModule } from './system-parameters/system-parameters.mo
     CompanyConfigModule,
     PermissionsModule,
     SystemParametersModule,
+    ProductBatchModule,
   ],
   controllers: [AppController],
   providers: [AppService],

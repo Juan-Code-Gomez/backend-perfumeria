@@ -36,6 +36,6 @@ export class PurchaseController {
 
   @Delete(':id')
   remove(@Param('id', ParseIntPipe) id: number) {
-    return this.purchasesService.remove(id);
+    return this.purchasesService.delete(id);
   }
 }

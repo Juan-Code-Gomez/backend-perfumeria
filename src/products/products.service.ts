@@ -1330,11 +1330,14 @@ export class ProductsService {
 
       // Crea compra asociada si hay productos con stock > 0
       if (detalles.length > 0) {
+        const subtotal = detalles.reduce((sum, d) => sum + d.totalCost, 0);
         await this.prisma.purchase.create({
           data: {
             supplierId: proveedorDB.id,
             date: new Date(),
-            totalAmount: detalles.reduce((sum, d) => sum + d.totalCost, 0),
+            subtotal,
+            discount: 0,
+            totalAmount: subtotal,
             paidAmount: 0,
             isPaid: false,
             details: { create: detalles },
