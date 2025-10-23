@@ -817,6 +817,7 @@ export class SaleService {
             }
           },
           payments: true,
+          creditNote: true,
         },
       });
 
@@ -874,7 +875,33 @@ export class SaleService {
       //   }
       // }
 
-      // 4️⃣ Eliminar la venta (cascade borra SaleDetails y SalePayments automáticamente)
+      // 4️⃣ Eliminar registros relacionados manualmente (debido a falta de onDelete: Cascade)
+      
+      // Eliminar todos los pagos asociados
+      if (sale.payments.length > 0) {
+        await tx.salePayment.deleteMany({
+          where: { saleId: id },
+        });
+        console.log(`💳 ${sale.payments.length} pago(s) eliminado(s)`);
+      }
+
+      // Eliminar todos los detalles de la venta
+      if (sale.details.length > 0) {
+        await tx.saleDetail.deleteMany({
+          where: { saleId: id },
+        });
+        console.log(`📋 ${sale.details.length} detalle(s) de venta eliminado(s)`);
+      }
+
+      // Verificar si hay una nota de crédito asociada y eliminarla
+      if (sale.creditNote) {
+        await tx.creditNote.delete({
+          where: { saleId: id },
+        });
+        console.log(`📄 Nota de crédito eliminada`);
+      }
+
+      // 5️⃣ Ahora sí podemos eliminar la venta
       await tx.sale.delete({
         where: { id },
       });
