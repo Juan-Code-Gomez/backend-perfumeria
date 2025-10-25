@@ -51,13 +51,38 @@ function execCommand(command, description) {
 
 async function checkIfDatabaseIsNew() {
   try {
-    // Intentar consultar la tabla de migraciones de Prisma
-    await prisma.$queryRaw`SELECT EXISTS (
-      SELECT FROM information_schema.tables 
-      WHERE table_schema = 'public' 
-      AND table_name = '_prisma_migrations'
-    ) as exists`;
+    // Verificar si existe la tabla de migraciones
+    const migrationTableExists = await prisma.$queryRaw`
+      SELECT EXISTS (
+        SELECT FROM information_schema.tables 
+        WHERE table_schema = 'public' 
+        AND table_name = '_prisma_migrations'
+      ) as exists
+    `;
     
+    if (!migrationTableExists[0].exists) {
+      // La tabla _prisma_migrations NO existe
+      // Verificar si hay OTRAS tablas en la BD
+      const otherTables = await prisma.$queryRaw`
+        SELECT COUNT(*) as count
+        FROM information_schema.tables
+        WHERE table_schema = 'public'
+        AND table_type = 'BASE TABLE'
+      `;
+      
+      const tableCount = parseInt(otherTables[0].count);
+      
+      if (tableCount > 0) {
+        log(`⚠️  BD tiene ${tableCount} tablas pero NO tiene _prisma_migrations`, 'yellow');
+        log('Esto es una BD EXISTENTE que necesita baseline', 'yellow');
+        return false; // NO es nueva, es existente sin migraciones
+      } else {
+        log('BD completamente vacía - Nueva instalación', 'cyan');
+        return true; // Es nueva de verdad
+      }
+    }
+    
+    // La tabla existe, verificar cuántas migraciones tiene
     const result = await prisma.$queryRaw`
       SELECT COUNT(*) as count 
       FROM _prisma_migrations
@@ -68,8 +93,9 @@ async function checkIfDatabaseIsNew() {
     
     return migrationCount === 0;
   } catch (error) {
-    log('Tabla _prisma_migrations no existe - Base de datos nueva', 'yellow');
-    return true;
+    log(`Error al verificar BD: ${error.message}`, 'red');
+    // Si hay error, asumir que es existente por seguridad
+    return false;
   }
 }
 
