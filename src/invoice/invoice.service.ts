@@ -46,7 +46,7 @@ export class InvoiceService {
 
     // Calcular subtotal y total
     const subtotal = data.items.reduce((sum, item) => 
-      sum + (item.quantity * item.unitCost), 0
+      sum + (item.quantity * item.unitPrice), 0
     );
     const discount = data.discount || 0;
     const totalAmount = subtotal - discount;
@@ -83,9 +83,14 @@ export class InvoiceService {
               productId: item.productId,
               description: item.description || products.find(p => p.id === item.productId)?.name || '',
               quantity: item.quantity,
-              unitPrice: item.unitCost,
-              totalPrice: item.quantity * item.unitCost,
-              affectInventory: true,
+              unitPrice: item.unitPrice,
+              totalPrice: item.quantity * item.unitPrice,
+              affectInventory: item.affectInventory ?? true,
+              shouldCreateProduct: item.shouldCreateProduct ?? false,
+              currentMarketPrice: item.currentMarketPrice,
+              priceVariation: item.priceVariation,
+              profitMargin: item.profitMargin,
+              notes: item.notes,
             },
           });
         })
@@ -113,8 +118,8 @@ export class InvoiceService {
               create: data.items.map((item) => ({
                 productId: item.productId,
                 quantity: item.quantity,
-                unitCost: item.unitCost,
-                totalCost: item.quantity * item.unitCost,
+                unitCost: item.unitPrice,
+                totalCost: item.quantity * item.unitPrice,
               })),
             },
           },
@@ -137,13 +142,13 @@ export class InvoiceService {
                 purchaseId: purchase.id,
                 quantity: item.quantity,
                 remainingQty: item.quantity,
-                unitCost: item.unitCost,
+                unitCost: item.unitPrice,
                 purchaseDate: invoiceDate,
-                expiryDate: item.expiryDate ? parseLocalDate(item.expiryDate) : null,
-                batchNumber: item.batchNumber,
+                expiryDate: null, // Ya no usamos expiryDate de InvoiceItem
+                batchNumber: null, // Ya no usamos batchNumber de InvoiceItem
               },
             });
-            console.log(`📦 Lote creado: Producto ${item.productId}, Cantidad: ${item.quantity}, Costo: $${item.unitCost}`);
+            console.log(`📦 Lote creado: Producto ${item.productId}, Cantidad: ${item.quantity}, Costo: $${item.unitPrice}`);
           })
         );
 

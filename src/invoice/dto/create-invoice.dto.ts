@@ -10,19 +10,35 @@ export class InvoiceItemDto {
   quantity: number;
 
   @IsNumber()
-  unitCost: number;
+  unitPrice: number; // Cambiado de unitCost a unitPrice
 
   @IsOptional()
   @IsString()
   description?: string;
 
   @IsOptional()
-  @IsString()
-  batchNumber?: string; // Número de lote del proveedor
+  @IsBoolean()
+  shouldCreateProduct?: boolean;
 
   @IsOptional()
-  @IsDateString()
-  expiryDate?: string; // Fecha de vencimiento del producto
+  @IsBoolean()
+  affectInventory?: boolean;
+
+  @IsOptional()
+  @IsNumber()
+  currentMarketPrice?: number;
+
+  @IsOptional()
+  @IsNumber()
+  priceVariation?: number;
+
+  @IsOptional()
+  @IsNumber()
+  profitMargin?: number;
+
+  @IsOptional()
+  @IsString()
+  notes?: string;
 }
 
 export class CreateInvoiceDto {
