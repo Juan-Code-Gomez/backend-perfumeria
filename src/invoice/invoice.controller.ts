@@ -11,8 +11,22 @@ export class InvoiceController {
 
   @Post()
   @UseGuards(JwtAuthGuard)
-  create(@Body() createInvoiceDto: CreateInvoiceDto) {
-    return this.invoiceService.create(createInvoiceDto);
+  async create(@Body() createInvoiceDto: CreateInvoiceDto) {
+    try {
+      console.log('📝 Creando factura con datos:', JSON.stringify(createInvoiceDto, null, 2));
+      const result = await this.invoiceService.create(createInvoiceDto);
+      console.log('✅ Factura creada exitosamente:', result?.id);
+      return result;
+    } catch (error) {
+      console.error('❌ ERROR COMPLETO AL CREAR FACTURA:');
+      console.error('Tipo:', error.constructor.name);
+      console.error('Mensaje:', error.message);
+      console.error('Stack:', error.stack);
+      console.error('Code:', error.code);
+      console.error('Meta:', error.meta);
+      console.error('Datos enviados:', JSON.stringify(createInvoiceDto, null, 2));
+      throw error;
+    }
   }
 
   @Get()
