@@ -198,7 +198,7 @@ model Purchase {
   subtotal      Float            // Suma de (quantity * unitCost)
   discount      Float            @default(0)
   totalAmount   Float            // = subtotal - discount
-  paidAmount    Float
+  paidAmount    Float            @default(0)
   isPaid        Boolean          @default(false)
   
   // Datos de la factura del proveedor (opcionales)
@@ -219,6 +219,7 @@ model Purchase {
   @@index([invoiceDate])
   @@index([dueDate])
 }
+
 
 model PurchaseDetail {
   id         Int      @id @default(autoincrement())

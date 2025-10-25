@@ -6,16 +6,17 @@ import { CreateInvoicePaymentDto } from './dto/create-invoice-payment.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 @Controller('invoices')
-@UseGuards(JwtAuthGuard)
 export class InvoiceController {
   constructor(private readonly invoiceService: InvoiceService) {}
 
   @Post()
+  @UseGuards(JwtAuthGuard)
   create(@Body() createInvoiceDto: CreateInvoiceDto) {
     return this.invoiceService.create(createInvoiceDto);
   }
 
   @Get()
+  @UseGuards(JwtAuthGuard)
   findAll(
     @Query('status') status?: string,
     @Query('overdue') overdue?: string,
@@ -63,36 +64,43 @@ export class InvoiceController {
   }
 
   @Get('summary')
+  @UseGuards(JwtAuthGuard)
   getInvoiceSummary() {
     return this.invoiceService.getInvoiceSummary();
   }
 
   @Get(':id')
+  @UseGuards(JwtAuthGuard)
   findOne(@Param('id') id: string) {
     return this.invoiceService.findOne(Number(id));
   }
 
   @Patch(':id')
+  @UseGuards(JwtAuthGuard)
   update(@Param('id') id: string, @Body() updateInvoiceDto: UpdateInvoiceDto) {
     return this.invoiceService.update(Number(id), updateInvoiceDto);
   }
 
   @Post(':id/pay')
+  @UseGuards(JwtAuthGuard)
   payInvoice(@Param('id') id: string, @Body() payInvoiceDto: PayInvoiceDto) {
     return this.invoiceService.payInvoice(Number(id), payInvoiceDto);
   }
 
   @Post('payments')
+  @UseGuards(JwtAuthGuard)
   registerPayment(@Body() createPaymentDto: CreateInvoicePaymentDto) {
     return this.invoiceService.registerPayment(createPaymentDto);
   }
 
   @Get(':id/payments')
+  @UseGuards(JwtAuthGuard)
   getPaymentHistory(@Param('id') id: string) {
     return this.invoiceService.getPaymentHistory(Number(id));
   }
 
   @Delete(':id')
+  @UseGuards(JwtAuthGuard)
   remove(@Param('id') id: string) {
     return this.invoiceService.remove(Number(id));
   }

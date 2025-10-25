@@ -3,11 +3,11 @@ import { DashboardService } from './dashboard.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard'; // Protegido solo para usuarios logueados
 
 @Controller('dashboard')
-@UseGuards(JwtAuthGuard)
 export class DashboardController {
   constructor(private readonly dashboardService: DashboardService) {}
 
   @Get('summary')
+  @UseGuards(JwtAuthGuard)
   async getSummary(
     @Query('dateFrom') dateFrom?: string,
     @Query('dateTo') dateTo?: string,
@@ -29,11 +29,12 @@ export class DashboardController {
   }
 
   @Get('executive-summary')
+  @UseGuards(JwtAuthGuard)
   async getExecutiveSummary() {
     return this.dashboardService.getExecutiveSummary();
   }
 
-  // 🔍 ENDPOINT DE DIAGNÓSTICO TEMPORAL
+  // 🔍 ENDPOINT DE DIAGNÓSTICO TEMPORAL (Sin autenticación para testing)
   @Get('debug')
   async debugDashboard() {
     try {
