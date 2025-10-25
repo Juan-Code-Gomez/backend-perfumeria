@@ -9,8 +9,14 @@ export class InvoiceItemDto {
   @IsNumber()
   quantity: number;
 
+  // Aceptar ambos campos para compatibilidad
+  @IsOptional()
   @IsNumber()
-  unitPrice: number; // Cambiado de unitCost a unitPrice
+  unitPrice?: number;
+
+  @IsOptional()
+  @IsNumber()
+  unitCost?: number; // Deprecated - mantener para compatibilidad temporal
 
   @IsOptional()
   @IsString()

@@ -45,9 +45,11 @@ export class InvoiceService {
     }
 
     // Calcular subtotal y total
-    const subtotal = data.items.reduce((sum, item) => 
-      sum + (item.quantity * item.unitPrice), 0
-    );
+    // Compatibilidad: usar unitCost (deprecated) o unitPrice
+    const subtotal = data.items.reduce((sum, item) => {
+      const price = item.unitPrice ?? item.unitCost ?? 0;
+      return sum + (item.quantity * price);
+    }, 0);
     const discount = data.discount || 0;
     const totalAmount = subtotal - discount;
     const paidAmount = data.paidAmount || 0;
@@ -77,14 +79,17 @@ export class InvoiceService {
       // 2. Crear los items de la factura
       const invoiceItems = await Promise.all(
         data.items.map(async (item) => {
+          // Compatibilidad: usar unitCost (deprecated) o unitPrice
+          const unitPrice = item.unitPrice ?? item.unitCost ?? 0;
+          
           return tx.invoiceItem.create({
             data: {
               invoiceId: invoice.id,
               productId: item.productId,
               description: item.description || products.find(p => p.id === item.productId)?.name || '',
               quantity: item.quantity,
-              unitPrice: item.unitPrice,
-              totalPrice: item.quantity * item.unitPrice,
+              unitPrice,
+              totalPrice: item.quantity * unitPrice,
               affectInventory: item.affectInventory ?? true,
               shouldCreateProduct: item.shouldCreateProduct ?? false,
               currentMarketPrice: item.currentMarketPrice,
@@ -115,12 +120,15 @@ export class InvoiceService {
             dueDate,
             notes: data.notes,
             details: {
-              create: data.items.map((item) => ({
-                productId: item.productId,
-                quantity: item.quantity,
-                unitCost: item.unitPrice,
-                totalCost: item.quantity * item.unitPrice,
-              })),
+              create: data.items.map((item) => {
+                const unitPrice = item.unitPrice ?? item.unitCost ?? 0;
+                return {
+                  productId: item.productId,
+                  quantity: item.quantity,
+                  unitCost: unitPrice,
+                  totalCost: item.quantity * unitPrice,
+                };
+              }),
             },
           },
           include: {
@@ -136,19 +144,21 @@ export class InvoiceService {
         // Crear lotes FIFO para cada item
         await Promise.all(
           data.items.map(async (item) => {
+            const unitPrice = item.unitPrice ?? item.unitCost ?? 0;
+            
             await tx.productBatch.create({
               data: {
                 productId: item.productId,
                 purchaseId: purchase.id,
                 quantity: item.quantity,
                 remainingQty: item.quantity,
-                unitCost: item.unitPrice,
+                unitCost: unitPrice,
                 purchaseDate: invoiceDate,
                 expiryDate: null, // Ya no usamos expiryDate de InvoiceItem
                 batchNumber: null, // Ya no usamos batchNumber de InvoiceItem
               },
             });
-            console.log(`📦 Lote creado: Producto ${item.productId}, Cantidad: ${item.quantity}, Costo: $${item.unitPrice}`);
+            console.log(`📦 Lote creado: Producto ${item.productId}, Cantidad: ${item.quantity}, Costo: $${unitPrice}`);
           })
         );
 
