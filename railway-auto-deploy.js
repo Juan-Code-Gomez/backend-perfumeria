@@ -1,0 +1,160 @@
+#!/usr/bin/env node
+
+/**
+ * RAILWAY AUTO-DEPLOYMENT SCRIPT
+ * 
+ * Este script se ejecuta automáticamente en Railway durante el deployment.
+ * Maneja clientes existentes con migraciones de Prisma.
+ * 
+ * Flujo:
+ * 1. Verifica si la base de datos tiene la tabla _prisma_migrations
+ * 2. Si es nueva, aplica todas las migraciones
+ * 3. Si es existente, marca baseline y aplica solo las nuevas
+ * 4. Inicia la aplicación
+ */
+
+const { execSync } = require('child_process');
+const { PrismaClient } = require('@prisma/client');
+
+const prisma = new PrismaClient();
+
+// Colores para logs
+const colors = {
+  reset: '\x1b[0m',
+  green: '\x1b[32m',
+  yellow: '\x1b[33m',
+  blue: '\x1b[34m',
+  cyan: '\x1b[36m',
+  red: '\x1b[31m'
+};
+
+function log(message, color = 'reset') {
+  const timestamp = new Date().toISOString();
+  console.log(`${colors[color]}[${timestamp}] ${message}${colors.reset}`);
+}
+
+function execCommand(command, description) {
+  log(description, 'blue');
+  try {
+    const output = execSync(command, { 
+      encoding: 'utf-8',
+      stdio: 'inherit'
+    });
+    log(`✓ ${description} - Completado`, 'green');
+    return true;
+  } catch (error) {
+    log(`✗ ${description} - Falló`, 'red');
+    console.error(error.message);
+    return false;
+  }
+}
+
+async function checkIfDatabaseIsNew() {
+  try {
+    // Intentar consultar la tabla de migraciones de Prisma
+    await prisma.$queryRaw`SELECT EXISTS (
+      SELECT FROM information_schema.tables 
+      WHERE table_schema = 'public' 
+      AND table_name = '_prisma_migrations'
+    ) as exists`;
+    
+    const result = await prisma.$queryRaw`
+      SELECT COUNT(*) as count 
+      FROM _prisma_migrations
+    `;
+    
+    const migrationCount = parseInt(result[0].count);
+    log(`Base de datos tiene ${migrationCount} migraciones aplicadas`, 'cyan');
+    
+    return migrationCount === 0;
+  } catch (error) {
+    log('Tabla _prisma_migrations no existe - Base de datos nueva', 'yellow');
+    return true;
+  }
+}
+
+async function checkIfBaselineExists() {
+  try {
+    const result = await prisma.$queryRaw`
+      SELECT EXISTS (
+        SELECT 1 FROM _prisma_migrations 
+        WHERE migration_name = '20251025161155_baseline_complete_schema'
+      ) as exists
+    `;
+    
+    return result[0].exists;
+  } catch (error) {
+    return false;
+  }
+}
+
+async function main() {
+  log('═══════════════════════════════════════════════════', 'cyan');
+  log('  🚀 RAILWAY AUTO-DEPLOYMENT - PRISMA MIGRATIONS', 'cyan');
+  log('═══════════════════════════════════════════════════', 'cyan');
+
+  try {
+    // 1. Verificar tipo de base de datos
+    const isNewDatabase = await checkIfDatabaseIsNew();
+    
+    if (isNewDatabase) {
+      // Base de datos nueva
+      log('📦 Base de datos NUEVA detectada', 'yellow');
+      log('Aplicando todas las migraciones...', 'blue');
+      
+      if (!execCommand('npx prisma migrate deploy', 'Aplicar migraciones')) {
+        throw new Error('Fallo al aplicar migraciones');
+      }
+      
+    } else {
+      // Base de datos existente
+      log('📊 Base de datos EXISTENTE detectada', 'yellow');
+      
+      const baselineExists = await checkIfBaselineExists();
+      
+      if (!baselineExists) {
+        log('Marcando baseline como aplicado (primera vez)...', 'blue');
+        
+        // Marcar baseline como aplicado
+        if (!execCommand(
+          'npx prisma migrate resolve --applied 20251025161155_baseline_complete_schema',
+          'Marcar baseline'
+        )) {
+          log('⚠️  Baseline ya estaba marcado o no se pudo marcar', 'yellow');
+        }
+      } else {
+        log('✓ Baseline ya marcado previamente', 'green');
+      }
+      
+      // Aplicar migraciones nuevas (si las hay)
+      log('Aplicando migraciones pendientes...', 'blue');
+      if (!execCommand('npx prisma migrate deploy', 'Aplicar migraciones nuevas')) {
+        log('⚠️  No hay migraciones pendientes o ya están aplicadas', 'yellow');
+      }
+    }
+    
+    // 2. Generar Prisma Client
+    log('Generando Prisma Client...', 'blue');
+    if (!execCommand('npx prisma generate', 'Generar Prisma Client')) {
+      throw new Error('Fallo al generar Prisma Client');
+    }
+    
+    log('═══════════════════════════════════════════════════', 'green');
+    log('  ✅ DEPLOYMENT COMPLETADO EXITOSAMENTE', 'green');
+    log('═══════════════════════════════════════════════════', 'green');
+    
+    await prisma.$disconnect();
+    process.exit(0);
+    
+  } catch (error) {
+    log('═══════════════════════════════════════════════════', 'red');
+    log('  ❌ ERROR EN DEPLOYMENT', 'red');
+    log('═══════════════════════════════════════════════════', 'red');
+    console.error(error);
+    
+    await prisma.$disconnect();
+    process.exit(1);
+  }
+}
+
+main();

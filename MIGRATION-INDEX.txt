@@ -1,0 +1,209 @@
+┌─────────────────────────────────────────────────────────────┐
+│  📦 SISTEMA DE MIGRACIÓN Y SINCRONIZACIÓN - PRODUCCIÓN     │
+│  Sistema de Perfumería - Versión 2.0                       │
+└─────────────────────────────────────────────────────────────┘
+
+🎯 INICIO RÁPIDO
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  1️⃣  node create-backup.js           ← Crear backup + migrar
+  2️⃣  (Esperar confirmación)
+  3️⃣  npx prisma generate             ← Regenerar cliente
+  4️⃣  (Reiniciar backend)
+  ✅  ¡Listo!
+
+
+📁 ESTRUCTURA DE ARCHIVOS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📂 backend-perfumeria/
+│
+├─ 📄 README-SYNC-PRODUCTION.md          ⭐ LÉEME PRIMERO
+│   └─ Guía maestra con toda la información
+│
+├─ 🔧 SCRIPTS DE EJECUCIÓN (Node.js)
+│  │
+│  ├─ create-backup.js                   💾 Backup automático
+│  │   └─ Crea backup antes de migrar
+│  │   └─ Comando: node create-backup.js
+│  │
+│  ├─ execute-sync-production.js         ⭐ Migración automática
+│  │   └─ Ejecuta sync-production-safe.sql
+│  │   └─ Comando: node execute-sync-production.js
+│  │
+│  └─ check-production-diff.js           🔍 Verificar diferencias
+│      └─ Muestra qué falta en producción
+│      └─ Comando: node check-production-diff.js
+│
+├─ 📜 SCRIPTS SQL
+│  │
+│  ├─ sync-production-safe.sql           ⭐ MIGRACIÓN COMPLETA
+│  │   └─ TODO el sistema sincronizado
+│  │   └─ 7 tablas nuevas + modificaciones
+│  │   └─ 100% seguro (idempotente)
+│  │   └─ Recomendado: SÍ
+│  │
+│  ├─ migration-production-invoices.sql  Solo facturas
+│  │   └─ 3 tablas de facturas
+│  │   └─ Usar solo si ya tienes lo demás
+│  │
+│  └─ migration-full-sync.sql            Generado por Prisma
+│      └─ Uso avanzado
+│
+└─ 📚 DOCUMENTACIÓN
+   │
+   ├─ SYNC-PRODUCTION-GUIDE.md           📖 Guía completa
+   │   └─ Detalles de sincronización
+   │   └─ Troubleshooting
+   │   └─ Todas las opciones
+   │
+   └─ GUIA-MIGRACION-PRODUCCION.md       📖 Guía de facturas
+       └─ Específica para módulo de facturas
+
+
+🚦 FLUJOS DE TRABAJO
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+┌─────────────────────────────────────────────────────────┐
+│ FLUJO 1: TODO AUTOMÁTICO (Recomendado para la mayoría) │
+└─────────────────────────────────────────────────────────┘
+
+  1. cd backend-perfumeria
+  2. node create-backup.js
+     ↓
+     Crea backup automático
+     ↓
+     Pregunta si ejecutar migración
+     ↓
+     (Si dices "sí")
+     ↓
+  3. Ejecuta migración automáticamente
+  4. npx prisma generate
+  5. Reiniciar backend
+  ✅ Listo
+
+
+┌─────────────────────────────────────────────────────────┐
+│ FLUJO 2: VERIFICAR PRIMERO (Para los precavidos)       │
+└─────────────────────────────────────────────────────────┘
+
+  1. node check-production-diff.js
+     ↓
+     Muestra qué falta en producción
+     ↓
+  2. node create-backup.js
+     ↓
+  3. node execute-sync-production.js
+     ↓
+  4. npx prisma generate
+  5. Reiniciar backend
+  ✅ Listo
+
+
+┌─────────────────────────────────────────────────────────┐
+│ FLUJO 3: MANUAL CON pgAdmin (Para los visuales)        │
+└─────────────────────────────────────────────────────────┘
+
+  1. Abrir pgAdmin
+  2. Hacer backup manual (opcional)
+  3. Query Tool
+  4. Open → sync-production-safe.sql
+  5. Execute (F5)
+  6. Verificar mensajes de éxito
+  7. npx prisma generate
+  8. Reiniciar backend
+  ✅ Listo
+
+
+📊 ¿QUÉ SE SINCRONIZA?
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+TABLAS NUEVAS (7):
+  ✅ InvoiceItem           - Ítems de facturas con FIFO
+  ✅ InvoicePayment        - Pagos/abonos a facturas
+  ✅ company_config        - Configuración empresa
+  ✅ module_permissions    - Permisos por módulo
+  ✅ product_batches       - Sistema FIFO inventario
+  ✅ system_modules        - Módulos del sistema
+  ✅ system_parameters     - Parámetros configurables
+
+MODIFICACIONES A TABLAS EXISTENTES:
+  📝 User       → + companyCode
+  📝 Supplier   → nit ahora nullable
+  📝 Purchase   → + 6 campos (subtotal, discount, etc.)
+  📝 Invoice    → + 8 campos (supplierId, notes, etc.)
+
+ENUMS ACTUALIZADOS:
+  🔧 ExpenseCategory → + SUPPLIER_PAYMENT
+
+
+✅ GARANTÍAS DE SEGURIDAD
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  ✓ NO elimina datos
+  ✓ NO borra tablas
+  ✓ Idempotente (seguro ejecutar varias veces)
+  ✓ Transaccional (BEGIN/COMMIT)
+  ✓ Verificaciones IF NOT EXISTS
+  ✓ Preserva datos existentes al 100%
+
+
+🎯 CASOS DE USO
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+┌────────────────────────────┬─────────────────────────────┐
+│ Situación                  │ Usar                        │
+├────────────────────────────┼─────────────────────────────┤
+│ Primera vez en producción  │ sync-production-safe.sql    │
+│ No sé qué falta            │ check-production-diff.js    │
+│ Producción desactualizada  │ sync-production-safe.sql    │
+│ Solo necesito facturas     │ migration-production-...sql │
+│ Quiero estar 100% seguro   │ create-backup.js primero    │
+└────────────────────────────┴─────────────────────────────┘
+
+
+⏱️ TIEMPOS ESTIMADOS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  Backup automático:          ~10-30 segundos
+  Migración SQL:              ~5-10 segundos
+  Regenerar Prisma Client:    ~5 segundos
+  Reinicio backend:           ~5 segundos
+  ─────────────────────────────────────────
+  TOTAL:                      < 1 minuto
+
+
+🆘 AYUDA RÁPIDA
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  Error                     Solución
+  ─────────────────────    ─────────────────────────────
+  "psql not found"      →  Usar pgAdmin (más fácil)
+  "permission denied"   →  Ejecutar como admin DB
+  "already exists"      →  ✅ Normal, script lo salta
+  "cannot connect"      →  Verificar DATABASE_URL
+  Cambios no visibles   →  Regenerar Prisma + reiniciar
+
+
+📞 DOCUMENTACIÓN COMPLETA
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  📖 README-SYNC-PRODUCTION.md      - Guía maestra
+  📖 SYNC-PRODUCTION-GUIDE.md       - Guía detallada
+  📖 GUIA-MIGRACION-PRODUCCION.md   - Solo facturas
+
+
+✨ RECOMENDACIÓN FINAL
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  Para la mayoría de casos:
+
+    cd backend-perfumeria
+    node create-backup.js
+
+  Eso es todo. El script te guiará paso a paso.
+
+
+─────────────────────────────────────────────────────────────
+Versión: 2.0 | Fecha: 2025-10-25 | Estado: ✅ Listo
+─────────────────────────────────────────────────────────────
