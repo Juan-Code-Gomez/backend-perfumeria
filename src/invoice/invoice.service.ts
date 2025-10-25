@@ -337,6 +337,123 @@ export class InvoiceService {
     };
   }
 
+  /**
+   * Registrar un pago o abono a una factura
+   * También crea un gasto automáticamente para el cierre de caja
+   */
+  async registerPayment(data: {
+    invoiceId: number;
+    amount: number;
+    paymentDate?: string;
+    paymentMethod?: string;
+    notes?: string;
+  }) {
+    const invoice = await this.prisma.invoice.findUnique({
+      where: { id: data.invoiceId },
+      include: { Supplier: true },
+    });
+
+    if (!invoice) {
+      throw new NotFoundException(`Factura con ID ${data.invoiceId} no encontrada`);
+    }
+
+    const remainingAmount = invoice.amount - invoice.paidAmount;
+
+    if (data.amount > remainingAmount) {
+      throw new BadRequestException(
+        `El monto a pagar ($${data.amount}) excede el saldo pendiente ($${remainingAmount})`
+      );
+    }
+
+    const paymentDate = data.paymentDate ? parseLocalDate(data.paymentDate) : new Date();
+
+    return this.prisma.$transaction(async (tx) => {
+      // 1. Crear el registro de pago
+      const payment = await tx.invoicePayment.create({
+        data: {
+          invoiceId: data.invoiceId,
+          amount: data.amount,
+          paymentDate,
+          paymentMethod: data.paymentMethod,
+          notes: data.notes,
+        },
+      });
+
+      // 2. Crear el gasto para el cierre de caja
+      const expense = await tx.expense.create({
+        data: {
+          date: paymentDate,
+          amount: data.amount,
+          description: `Pago de Factura ${invoice.invoiceNumber} - ${invoice.Supplier?.name || invoice.supplierName}`,
+          notes: data.notes,
+          category: 'SUPPLIER_PAYMENT',
+          paymentMethod: data.paymentMethod,
+        },
+      });
+
+      // 3. Vincular el pago con el gasto
+      await tx.invoicePayment.update({
+        where: { id: payment.id },
+        data: { expenseId: expense.id },
+      });
+
+      // 4. Actualizar el monto pagado y estado de la factura
+      const newPaidAmount = invoice.paidAmount + data.amount;
+      const newStatus = this.calculateStatus(invoice.amount, newPaidAmount);
+
+      await tx.invoice.update({
+        where: { id: data.invoiceId },
+        data: {
+          paidAmount: newPaidAmount,
+          status: newStatus,
+        },
+      });
+
+      return {
+        payment,
+        expense,
+        invoice: {
+          id: invoice.id,
+          invoiceNumber: invoice.invoiceNumber,
+          totalAmount: invoice.amount,
+          paidAmount: newPaidAmount,
+          remainingAmount: invoice.amount - newPaidAmount,
+          status: newStatus,
+        },
+      };
+    });
+  }
+
+  /**
+   * Obtener historial de pagos de una factura
+   */
+  async getPaymentHistory(invoiceId: number) {
+    const invoice = await this.prisma.invoice.findUnique({
+      where: { id: invoiceId },
+      include: {
+        InvoicePayment: {
+          orderBy: { paymentDate: 'desc' },
+        },
+      },
+    });
+
+    if (!invoice) {
+      throw new NotFoundException(`Factura con ID ${invoiceId} no encontrada`);
+    }
+
+    return {
+      invoice: {
+        id: invoice.id,
+        invoiceNumber: invoice.invoiceNumber,
+        totalAmount: invoice.amount,
+        paidAmount: invoice.paidAmount,
+        remainingAmount: invoice.amount - invoice.paidAmount,
+        status: invoice.status,
+      },
+      payments: invoice.InvoicePayment,
+    };
+  }
+
   private calculateStatus(amount: number, paidAmount: number): string {
     if (paidAmount === 0) return 'PENDING';
     if (paidAmount >= amount) return 'PAID';

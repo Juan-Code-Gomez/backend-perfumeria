@@ -2,6 +2,7 @@
 import { Controller, Get, Post, Body, Param, Patch, Delete, Query, UseGuards } from '@nestjs/common';
 import { InvoiceService } from './invoice.service';
 import { CreateInvoiceDto, UpdateInvoiceDto, PayInvoiceDto } from './dto/create-invoice.dto';
+import { CreateInvoicePaymentDto } from './dto/create-invoice-payment.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 @Controller('invoices')
@@ -79,6 +80,16 @@ export class InvoiceController {
   @Post(':id/pay')
   payInvoice(@Param('id') id: string, @Body() payInvoiceDto: PayInvoiceDto) {
     return this.invoiceService.payInvoice(Number(id), payInvoiceDto);
+  }
+
+  @Post('payments')
+  registerPayment(@Body() createPaymentDto: CreateInvoicePaymentDto) {
+    return this.invoiceService.registerPayment(createPaymentDto);
+  }
+
+  @Get(':id/payments')
+  getPaymentHistory(@Param('id') id: string) {
+    return this.invoiceService.getPaymentHistory(Number(id));
   }
 
   @Delete(':id')

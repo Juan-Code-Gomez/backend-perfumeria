@@ -127,7 +127,7 @@ model Product {
 model Supplier {
   id                    Int            @id @default(autoincrement())
   name                  String
-  nit                   String         @unique
+  nit                   String?        @unique
   phone                 String?
   email                 String?
   address               String?
@@ -460,33 +460,50 @@ model CapitalMovement {
 }
 
 model Invoice {
-  id                  Int           @id @default(autoincrement())
-  invoiceNumber       String        @unique
+  id                  Int              @id @default(autoincrement())
+  invoiceNumber       String           @unique
   supplierName        String
   amount              Float
-  paidAmount          Float         @default(0)
-  status              String        @default("PENDING")
+  paidAmount          Float            @default(0)
+  status              String           @default("PENDING")
   description         String?
-  notes               String?       // Notas adicionales
+  notes               String?          // Notas adicionales
   invoiceDate         DateTime
   dueDate             DateTime?
-  createdAt           DateTime      @default(now())
-  updatedAt           DateTime      @updatedAt
-  hasInventoryImpact  Boolean       @default(true)
-  inventoryProcessed  Boolean       @default(false)
-  isHistorical        Boolean       @default(false)
-  needsReconciliation Boolean       @default(false)
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
+  hasInventoryImpact  Boolean          @default(true)
+  inventoryProcessed  Boolean          @default(false)
+  isHistorical        Boolean          @default(false)
+  needsReconciliation Boolean          @default(false)
   originalDocument    String?
-  pricesAnalyzed      Boolean       @default(false)
+  pricesAnalyzed      Boolean          @default(false)
   supplierId          Int?
-  Supplier            Supplier?     @relation(fields: [supplierId], references: [id])
+  Supplier            Supplier?        @relation(fields: [supplierId], references: [id])
   InvoiceItem         InvoiceItem[]
+  InvoicePayment      InvoicePayment[]
 
   @@index([status])
   @@index([invoiceDate])
   @@index([dueDate])
   @@index([isHistorical])
   @@index([supplierId])
+}
+
+model InvoicePayment {
+  id            Int      @id @default(autoincrement())
+  invoiceId     Int
+  amount        Float
+  paymentDate   DateTime @default(now())
+  paymentMethod String?
+  notes         String?
+  expenseId     Int?     @unique // Relación con el gasto generado
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  invoice       Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([invoiceId])
+  @@index([paymentDate])
 }
 
 model CompanyConfig {
@@ -585,6 +602,7 @@ enum ExpenseCategory {
   SERVICIOS
   SUMINISTROS
   ALQUILER
+  SUPPLIER_PAYMENT
   OTRO
 }
 

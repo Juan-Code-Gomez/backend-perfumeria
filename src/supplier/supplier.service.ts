@@ -20,22 +20,15 @@ export class SupplierService {
       const supplier = await this.prisma.supplier.create({
         data: {
           name: createSupplierDto.name,
-          nit: createSupplierDto.nit,
-          phone: createSupplierDto.phone,
-          email: createSupplierDto.email,
-          address: createSupplierDto.address,
-          contactPerson: createSupplierDto.contactPerson,
-          website: createSupplierDto.website,
-          paymentTerms: createSupplierDto.paymentTerms,
-          creditLimit: createSupplierDto.creditLimit,
-          supplierType: createSupplierDto.supplierType,
-          specializedCategories: createSupplierDto.specializedCategories || [],
-          isActive: createSupplierDto.isActive ?? true,
-          isPreferred: createSupplierDto.isPreferred ?? false,
-          minOrderAmount: createSupplierDto.minOrderAmount,
-          leadTimeDays: createSupplierDto.leadTimeDays,
-          rating: createSupplierDto.rating,
-          notes: createSupplierDto.notes,
+          nit: (createSupplierDto.nit || null) as any,
+          phone: (createSupplierDto.phone || null) as any,
+          email: (createSupplierDto.email || null) as any,
+          address: (createSupplierDto.address || null) as any,
+          supplierType: (createSupplierDto.supplierType || null) as any,
+          // Valores por defecto para campos requeridos en schema
+          isActive: true,
+          isPreferred: false,
+          specializedCategories: [],
         },
         include: {
           _count: {
