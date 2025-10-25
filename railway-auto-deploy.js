@@ -113,14 +113,18 @@ async function main() {
       const baselineExists = await checkIfBaselineExists();
       
       if (!baselineExists) {
+        log('⚠️  Base de datos existente sin baseline marcado', 'yellow');
         log('Marcando baseline como aplicado (primera vez)...', 'blue');
         
-        // Marcar baseline como aplicado
-        if (!execCommand(
-          'npx prisma migrate resolve --applied 20251025161155_baseline_complete_schema',
-          'Marcar baseline'
-        )) {
-          log('⚠️  Baseline ya estaba marcado o no se pudo marcar', 'yellow');
+        // IMPORTANTE: Marcar baseline ANTES de intentar migrate deploy
+        try {
+          execSync(
+            'npx prisma migrate resolve --applied 20251025161155_baseline_complete_schema',
+            { encoding: 'utf-8', stdio: 'inherit' }
+          );
+          log('✓ Baseline marcado exitosamente', 'green');
+        } catch (error) {
+          log('⚠️  Error al marcar baseline, continuando...', 'yellow');
         }
       } else {
         log('✓ Baseline ya marcado previamente', 'green');
@@ -128,7 +132,13 @@ async function main() {
       
       // Aplicar migraciones nuevas (si las hay)
       log('Aplicando migraciones pendientes...', 'blue');
-      if (!execCommand('npx prisma migrate deploy', 'Aplicar migraciones nuevas')) {
+      try {
+        execSync('npx prisma migrate deploy', { 
+          encoding: 'utf-8',
+          stdio: 'inherit'
+        });
+        log('✓ Migraciones aplicadas exitosamente', 'green');
+      } catch (error) {
         log('⚠️  No hay migraciones pendientes o ya están aplicadas', 'yellow');
       }
     }
