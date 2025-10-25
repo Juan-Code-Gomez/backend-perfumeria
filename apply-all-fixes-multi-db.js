@@ -59,7 +59,7 @@ async function applyAllFixes(databaseUrl, dbName) {
     // Calcular subtotal donde sea NULL
     await prisma.$executeRaw`
       UPDATE "Purchase" 
-      SET "subtotal" = "total" - COALESCE("discount", 0)
+      SET "subtotal" = "totalAmount" - COALESCE("discount", 0)
       WHERE "subtotal" IS NULL;
     `;
     
