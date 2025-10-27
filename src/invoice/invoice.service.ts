@@ -105,22 +105,32 @@ export class InvoiceService {
 
       // 3. Si debe procesar inventario, crear compra y lotes
       if (data.processInventory !== false) {
-        // Crear compra automática
+        // Filtrar items que afectan inventario
+        const itemsAffectingInventory = data.items.filter(item => item.affectInventory !== false);
+        
+        // Calcular totales solo de items que afectan inventario
+        const inventorySubtotal = itemsAffectingInventory.reduce((sum, item) => {
+          const price = item.unitPrice ?? item.unitCost ?? 0;
+          return sum + (item.quantity * price);
+        }, 0);
+        const inventoryTotal = inventorySubtotal - discount;
+        
+        // Crear compra automática solo con items que afectan inventario
         const purchase = await tx.purchase.create({
           data: {
             supplierId: data.supplierId,
             date: invoiceDate,
-            subtotal,
+            subtotal: inventorySubtotal,
             discount,
-            totalAmount,
-            paidAmount,
+            totalAmount: inventoryTotal,
+            paidAmount: paidAmount, // Se mantiene el pago total
             isPaid: paidAmount >= totalAmount,
             invoiceNumber: data.invoiceNumber,
             invoiceDate,
             dueDate,
             notes: data.notes,
             details: {
-              create: data.items.map((item) => {
+              create: itemsAffectingInventory.map((item) => {
                 const unitPrice = item.unitPrice ?? item.unitCost ?? 0;
                 return {
                   productId: item.productId,
@@ -139,11 +149,11 @@ export class InvoiceService {
           },
         });
 
-        console.log(`🛒 Compra #${purchase.id} creada automáticamente`);
+        console.log(`🛒 Compra #${purchase.id} creada con ${itemsAffectingInventory.length} items que afectan inventario`);
 
-        // Crear lotes FIFO para cada item
+        // Crear lotes FIFO solo para items que afectan inventario
         await Promise.all(
-          data.items.map(async (item) => {
+          itemsAffectingInventory.map(async (item) => {
             const unitPrice = item.unitPrice ?? item.unitCost ?? 0;
             
             await tx.productBatch.create({
@@ -154,27 +164,33 @@ export class InvoiceService {
                 remainingQty: item.quantity,
                 unitCost: unitPrice,
                 purchaseDate: invoiceDate,
-                expiryDate: null, // Ya no usamos expiryDate de InvoiceItem
-                batchNumber: null, // Ya no usamos batchNumber de InvoiceItem
+                expiryDate: null,
+                batchNumber: null,
               },
             });
             console.log(`📦 Lote creado: Producto ${item.productId}, Cantidad: ${item.quantity}, Costo: $${unitPrice}`);
           })
         );
 
-        // Actualizar stock de productos
+        // Actualizar stock solo para productos que afectan inventario
         await Promise.all(
-          data.items.map(async (item) => {
+          itemsAffectingInventory.map(async (item) => {
             await tx.product.update({
               where: { id: item.productId },
               data: {
                 stock: { increment: item.quantity },
               },
             });
+            console.log(`📈 Stock incrementado: Producto ${item.productId} +${item.quantity}`);
           })
         );
 
-        console.log(`✅ Stock actualizado para ${data.items.length} productos`);
+        const skippedItems = data.items.filter(item => item.affectInventory === false);
+        if (skippedItems.length > 0) {
+          console.log(`⏭️  ${skippedItems.length} items NO afectaron inventario (affectInventory=false)`);
+        }
+        
+        console.log(`✅ Stock actualizado para ${itemsAffectingInventory.length} de ${data.items.length} productos`);
       }
 
       // Log final
