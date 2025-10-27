@@ -15,19 +15,33 @@ interface FindAllOptions {
 export class SupplierService {
   constructor(private prisma: PrismaService) {}
 
+  /**
+   * Helper para limpiar valores nulos, undefined o strings vacíos
+   * Retorna undefined para que Prisma omita el campo (en lugar de establecer NULL)
+   */
+  private cleanValue(value: any): any {
+    if (value === null || value === undefined || value === '') {
+      return undefined;
+    }
+    return value;
+  }
+
   async create(createSupplierDto: CreateSupplierDto) {
     try {
       const supplier = await this.prisma.supplier.create({
         data: {
-          name: createSupplierDto.name,
-          nit: (createSupplierDto.nit || null) as any,
-          phone: (createSupplierDto.phone || null) as any,
-          email: (createSupplierDto.email || null) as any,
-          address: (createSupplierDto.address || null) as any,
-          supplierType: (createSupplierDto.supplierType || null) as any,
+          name: createSupplierDto.name.trim(),
+          nit: this.cleanValue(createSupplierDto.nit),
+          phone: this.cleanValue(createSupplierDto.phone),
+          email: this.cleanValue(createSupplierDto.email),
+          address: this.cleanValue(createSupplierDto.address),
+          supplierType: this.cleanValue(createSupplierDto.supplierType),
+          contactPerson: this.cleanValue(createSupplierDto.contactPerson),
+          notes: this.cleanValue(createSupplierDto.notes),
           // Valores por defecto para campos requeridos en schema
           isActive: true,
           isPreferred: false,
+          currentDebt: 0,
           specializedCategories: [],
         },
         include: {
@@ -181,24 +195,24 @@ export class SupplierService {
       const updatedSupplier = await this.prisma.supplier.update({
         where: { id },
         data: {
-          name: updateSupplierDto.name,
-          nit: updateSupplierDto.nit,
-          phone: updateSupplierDto.phone,
-          email: updateSupplierDto.email,
-          address: updateSupplierDto.address,
-          contactPerson: updateSupplierDto.contactPerson,
-          website: updateSupplierDto.website,
-          paymentTerms: updateSupplierDto.paymentTerms,
+          name: updateSupplierDto.name ? updateSupplierDto.name.trim() : undefined,
+          nit: this.cleanValue(updateSupplierDto.nit),
+          phone: this.cleanValue(updateSupplierDto.phone),
+          email: this.cleanValue(updateSupplierDto.email),
+          address: this.cleanValue(updateSupplierDto.address),
+          contactPerson: this.cleanValue(updateSupplierDto.contactPerson),
+          website: this.cleanValue(updateSupplierDto.website),
+          paymentTerms: this.cleanValue(updateSupplierDto.paymentTerms),
           creditLimit: updateSupplierDto.creditLimit,
           currentDebt: updateSupplierDto.currentDebt,
-          supplierType: updateSupplierDto.supplierType,
+          supplierType: this.cleanValue(updateSupplierDto.supplierType),
           specializedCategories: updateSupplierDto.specializedCategories,
           isActive: updateSupplierDto.isActive,
           isPreferred: updateSupplierDto.isPreferred,
           minOrderAmount: updateSupplierDto.minOrderAmount,
           leadTimeDays: updateSupplierDto.leadTimeDays,
           rating: updateSupplierDto.rating,
-          notes: updateSupplierDto.notes,
+          notes: this.cleanValue(updateSupplierDto.notes),
           updatedAt: new Date(),
         },
         include: {
