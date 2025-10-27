@@ -25,29 +25,38 @@ export class SaleService {
   async create(data: CreateSaleDto) {
     console.log('📝 Sale service - Datos recibidos:', JSON.stringify(data, null, 2));
     
-    // Validar si se permite fecha manual
+    // Validar si se permite fecha manual (solo si es una fecha diferente a hoy)
     if (data.date) {
-      const isManualDateAllowed = await this.systemParametersService.isManualSaleDateEnabled();
-      
-      if (!isManualDateAllowed) {
-        throw new BadRequestException(
-          'La selección manual de fecha no está habilitada. ' +
-          'Contacte al administrador si necesita registrar ventas históricas.'
-        );
-      }
-      
-      // Validar que la fecha no sea futura
       const saleDate = parseLocalDate(data.date);
       const today = new Date();
-      today.setHours(23, 59, 59, 999);
+      const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+      const todayEnd = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59, 999);
       
-      if (saleDate > today) {
-        throw new BadRequestException(
-          'No se pueden registrar ventas con fecha futura'
-        );
+      // Solo validar si la fecha NO es de hoy (es una fecha histórica o futura)
+      const isDateToday = saleDate >= todayStart && saleDate <= todayEnd;
+      
+      if (!isDateToday) {
+        // Es una fecha diferente a hoy - verificar si está permitido
+        const isManualDateAllowed = await this.systemParametersService.isManualSaleDateEnabled();
+        
+        if (!isManualDateAllowed) {
+          throw new BadRequestException(
+            'La selección manual de fecha no está habilitada. ' +
+            'Contacte al administrador si necesita registrar ventas históricas.'
+          );
+        }
+        
+        // Validar que la fecha no sea futura
+        if (saleDate > today) {
+          throw new BadRequestException(
+            'No se pueden registrar ventas con fecha futura'
+          );
+        }
+        
+        console.log('✅ Fecha manual permitida:', saleDate.toLocaleDateString());
+      } else {
+        console.log('✅ Venta con fecha de hoy (automática):', saleDate.toLocaleDateString());
       }
-      
-      console.log('✅ Fecha manual permitida:', saleDate.toLocaleDateString());
     }
     
     let isPaid = data.isPaid ?? false;
