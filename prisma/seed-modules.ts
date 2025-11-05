@@ -32,12 +32,20 @@ export async function seedModules() {
       order: 3,
     },
     {
+      name: 'pedidos',
+      displayName: 'Pedidos',
+      description: 'Gestión de pedidos pendientes de aprobación',
+      route: '/orders',
+      icon: 'FileSyncOutlined',
+      order: 4,
+    },
+    {
       name: 'productos',
       displayName: 'Productos',
       description: 'Gestión de inventario y productos',
       route: '/products',
       icon: 'AppstoreOutlined',
-      order: 4,
+      order: 5,
     },
     {
       name: 'clientes',
@@ -45,7 +53,7 @@ export async function seedModules() {
       description: 'Gestión de clientes',
       route: '/clients',
       icon: 'TeamOutlined',
-      order: 5,
+      order: 6,
     },
     {
       name: 'proveedores',
@@ -53,7 +61,7 @@ export async function seedModules() {
       description: 'Gestión de proveedores',
       route: '/suppliers',
       icon: 'ShopOutlined',
-      order: 6,
+      order: 7,
     },
     {
       name: 'gastos',
@@ -61,7 +69,7 @@ export async function seedModules() {
       description: 'Gestión de gastos y egresos',
       route: '/expenses',
       icon: 'DollarOutlined',
-      order: 7,
+      order: 8,
     },
     {
       name: 'cierres-caja',
@@ -69,7 +77,7 @@ export async function seedModules() {
       description: 'Control de cierres de caja',
       route: '/cash-closings',
       icon: 'FileDoneOutlined',
-      order: 8,
+      order: 9,
     },
     {
       name: 'capital',
@@ -77,7 +85,7 @@ export async function seedModules() {
       description: 'Gestión de capital y flujo de caja',
       route: '/capital',
       icon: 'WalletOutlined',
-      order: 9,
+      order: 10,
     },
     {
       name: 'facturas',
@@ -85,7 +93,7 @@ export async function seedModules() {
       description: 'Gestión de facturación',
       route: '/invoices',
       icon: 'FileTextOutlined',
-      order: 10,
+      order: 11,
     },
     {
       name: 'reportes',
@@ -93,7 +101,7 @@ export async function seedModules() {
       description: 'Reportes y análisis de datos',
       route: '/reports/profit-summary',
       icon: 'BarChartOutlined',
-      order: 11,
+      order: 12,
     },
     {
       name: 'configuracion',
@@ -101,7 +109,7 @@ export async function seedModules() {
       description: 'Configuración de la empresa y negocio',
       route: '/company-config',
       icon: 'SettingOutlined',
-      order: 12,
+      order: 13,
     },
     {
       name: 'categorias',
@@ -109,7 +117,7 @@ export async function seedModules() {
       description: 'Gestión de categorías de productos',
       route: '/categories',
       icon: 'GiftOutlined',
-      order: 13,
+      order: 14,
     },
     {
       name: 'unidades',
@@ -117,7 +125,7 @@ export async function seedModules() {
       description: 'Gestión de unidades de medida',
       route: '/units',
       icon: 'GiftOutlined',
-      order: 14,
+      order: 15,
     },
     {
       name: 'usuarios',
@@ -174,6 +182,10 @@ export async function seedRoles() {
       description: 'Vendedor/Cajero con acceso a POS, ventas, productos (solo lectura) sin información de costos'
     },
     {
+      name: 'BODEGA',
+      description: 'Encargado de bodega con acceso a aprobar pedidos y gestionar despachos'
+    },
+    {
       name: 'VIEWER',
       description: 'Solo lectura de información básica'
     }
@@ -201,6 +213,7 @@ export async function seedPermissions() {
   const manager = roles.find(r => r.name === 'MANAGER');
   const employee = roles.find(r => r.name === 'EMPLOYEE');
   const vendedor = roles.find(r => r.name === 'VENDEDOR');
+  const bodega = roles.find(r => r.name === 'BODEGA');
   const viewer = roles.find(r => r.name === 'VIEWER');
 
   // SUPER_ADMIN - Acceso total incluyendo administración del sistema
@@ -402,6 +415,100 @@ export async function seedPermissions() {
         create: {
           moduleId: module.id,
           roleId: vendedor.id,
+          ...permissions,
+        },
+      });
+    }
+  }
+
+  // BODEGA - Encargado de bodega que aprueba pedidos
+  if (bodega) {
+    const bodegaModules = modules.filter(m => 
+      ['dashboard', 'pos', 'ventas', 'productos', 'pedidos', 'clientes'].includes(m.name)
+    );
+    
+    for (const module of bodegaModules) {
+      let permissions;
+
+      switch (module.name) {
+        case 'dashboard':
+          permissions = {
+            canView: true,
+            canCreate: false,
+            canEdit: false,
+            canDelete: false,
+            canExport: false,
+          };
+          break;
+        case 'pos':
+          permissions = {
+            canView: true, // Puede ver POS
+            canCreate: false, // No crea desde POS (eso lo hace vendedor)
+            canEdit: false,
+            canDelete: false,
+            canExport: false,
+          };
+          break;
+        case 'pedidos':
+          permissions = {
+            canView: true, // Ver todos los pedidos
+            canCreate: false, // No crea pedidos (solo vendedor)
+            canEdit: true, // Puede editar pedidos pendientes
+            canDelete: false, // Solo admin puede eliminar
+            canExport: true,
+            customData: {
+              canApprove: true, // Permiso especial para aprobar pedidos
+            }
+          };
+          break;
+        case 'ventas':
+          permissions = {
+            canView: true, // Ver ventas (las que aprobó)
+            canCreate: true, // Crear venta al aprobar pedido
+            canEdit: false,
+            canDelete: false,
+            canExport: true,
+          };
+          break;
+        case 'productos':
+          permissions = {
+            canView: true, // Ver productos con stock completo
+            canCreate: false,
+            canEdit: false,
+            canDelete: false,
+            canExport: false,
+          };
+          break;
+        case 'clientes':
+          permissions = {
+            canView: true, // Ver clientes
+            canCreate: false,
+            canEdit: false,
+            canDelete: false,
+            canExport: false,
+          };
+          break;
+        default:
+          permissions = {
+            canView: true,
+            canCreate: false,
+            canEdit: false,
+            canDelete: false,
+            canExport: false,
+          };
+      }
+
+      await prisma.modulePermission.upsert({
+        where: { 
+          moduleId_roleId: { 
+            moduleId: module.id, 
+            roleId: bodega.id 
+          } 
+        },
+        update: permissions,
+        create: {
+          moduleId: module.id,
+          roleId: bodega.id,
           ...permissions,
         },
       });

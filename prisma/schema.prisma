@@ -20,6 +20,9 @@ model User {
   notifications           Notification[]
   notificationPreferences NotificationPreference? @relation("NotificationPreferences")
   roles                   UserRole[]
+  ordersCreated           Order[]                 @relation("OrderCreator")  // Pedidos creados por este usuario
+  ordersApproved          Order[]                 @relation("OrderApprover") // Pedidos aprobados por este usuario
+  orderHistory            OrderHistory[]          // Historial de cambios en pedidos
 }
 
 model Role {
@@ -71,6 +74,7 @@ model Product {
   categoryId          Int
   unitId              Int
   stock               Float
+  reservedStock       Float              @default(0)  // Stock reservado por pedidos pendientes
   minStock            Float?
   purchasePrice       Float
   salePrice           Float
@@ -113,6 +117,7 @@ model Product {
   PurchaseDetail      PurchaseDetail[]
   SaleDetail          SaleDetail[]
   batches             ProductBatch[]     @relation("ProductBatches")
+  OrderDetail         OrderDetail[]      // Relación con pedidos
 
   @@index([sku])
   @@index([barcode])
@@ -244,6 +249,7 @@ model Client {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   sales     Sale[]
+  orders    Order[]  // Pedidos del cliente
 }
 
 model Sale {
@@ -261,6 +267,7 @@ model Sale {
   client        Client?       @relation(fields: [clientId], references: [id])
   details       SaleDetail[]
   payments      SalePayment[]
+  order         Order?        // Relación con pedido original (si la venta viene de un pedido)
 }
 
 model SaleDetail {
@@ -680,5 +687,90 @@ model ProductBatch {
   @@index([productId, purchaseDate]) // Índice compuesto para búsqueda FIFO
   @@index([productId, remainingQty]) // Índice para buscar lotes con stock
   @@index([expiryDate]) // Índice para alertas de vencimiento
-  @@map("product_batches")
+    @@map("product_batches")
 }
+
+// ========================================
+// MODELOS DE PEDIDOS (Orders)
+// ========================================
+
+model Order {
+  id            Int           @id @default(autoincrement())
+  orderNumber   String        @unique  // OD-0001, OD-0002, etc.
+  orderDate     DateTime      @default(now())  // Fecha en que se creó el pedido
+  status        OrderStatus   @default(PENDING)
+  totalAmount   Float
+  customerName  String?
+  clientId      Int?
+  notes         String?       // Observaciones del vendedor al crear el pedido
+  
+  // Auditoría
+  createdById   Int           // VENDEDOR que creó el pedido
+  approvedById  Int?          // BODEGA/CAJERO/ADMIN que aprobó
+  approvedAt    DateTime?     // Fecha y hora de aprobación
+  
+  // Relación con venta (cuando se confirma el pedido)
+  saleId        Int?          @unique
+  
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  
+  client        Client?       @relation(fields: [clientId], references: [id])
+  createdBy     User          @relation("OrderCreator", fields: [createdById], references: [id])
+  approvedBy    User?         @relation("OrderApprover", fields: [approvedById], references: [id])
+  sale          Sale?         @relation(fields: [saleId], references: [id])
+  details       OrderDetail[]
+  history       OrderHistory[] // Log de cambios (creación, edición, aprobación, cancelación)
+  
+  @@index([status])
+  @@index([orderDate])
+  @@index([createdById])
+  @@index([approvedById])
+  @@map("orders")
+}
+
+model OrderDetail {
+  id             Int      @id @default(autoincrement())
+  orderId        Int
+  productId      Int
+  quantity       Float    // Cantidad solicitada (puede ser editada antes de aprobar)
+  originalQty    Float?   // Cantidad original del pedido (para auditoría)
+  unitPrice      Float
+  totalPrice     Float
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  
+  order          Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product        Product  @relation(fields: [productId], references: [id])
+  
+  @@index([orderId])
+  @@index([productId])
+  @@map("order_details")
+}
+
+model OrderHistory {
+  id          Int      @id @default(autoincrement())
+  orderId     Int
+  action      String   // CREATED, EDITED, APPROVED, CANCELLED
+  userId      Int      // Usuario que realizó la acción
+  changes     Json?    // Qué cambió (para EDITED: {"productId": 1, "from": 10, "to": 5})
+  notes       String?  // Notas adicionales
+  timestamp   DateTime @default(now())
+  
+  order       Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  user        User     @relation(fields: [userId], references: [id])
+  
+  @@index([orderId])
+  @@index([action])
+  @@map("order_history")
+}
+
+enum OrderStatus {
+  PENDING      // Pedido pendiente de aprobación
+  APPROVED     // Aprobado y convertido en venta
+  CANCELLED    // Cancelado/Rechazado
+}
+
+// ========================================
+// FIN MODELOS DE PEDIDOS
+// ========================================
