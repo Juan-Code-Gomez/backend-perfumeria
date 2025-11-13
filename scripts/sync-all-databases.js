@@ -36,6 +36,25 @@ async function syncDatabase(dbConfig) {
 
     let columnsAdded = 0;
 
+    // ===== CREAR ENUM OrderStatus si no existe =====
+    console.log('\n🔧 ENUM: OrderStatus');
+    try {
+      const enumExists = await client.query(`
+        SELECT 1 FROM pg_type WHERE typname = 'OrderStatus'
+      `);
+
+      if (enumExists.rows.length === 0) {
+        await client.query(`
+          CREATE TYPE "OrderStatus" AS ENUM ('PENDING', 'APPROVED', 'CANCELLED')
+        `);
+        console.log('   ✅ ENUM OrderStatus creado');
+      } else {
+        console.log('   ℹ️  ENUM OrderStatus ya existe');
+      }
+    } catch (error) {
+      console.log(`   ⚠️  Error con ENUM: ${error.message}`);
+    }
+
     // ===== TABLA Sale =====
     console.log('\n📋 Tabla: Sale');
     
@@ -128,6 +147,50 @@ async function syncDatabase(dbConfig) {
       } catch (error) {
         console.log(`   ❌ Error: ${col.name} - ${error.message}`);
       }
+    }
+
+    // ===== TABLA Order (si existe) =====
+    console.log('\n📋 Tabla: Order / orders');
+    
+    // Verificar si la tabla existe (puede ser "Order" o "orders")
+    const orderTableCheck = await client.query(`
+      SELECT tablename FROM pg_tables 
+      WHERE schemaname = 'public' 
+      AND (tablename = 'Order' OR tablename = 'orders')
+    `);
+
+    if (orderTableCheck.rows.length > 0) {
+      const orderTableName = orderTableCheck.rows[0].tablename;
+      console.log(`   📌 Tabla encontrada: ${orderTableName}`);
+
+      const orderColumns = [
+        { name: 'totalAmount', type: 'DOUBLE PRECISION', default: null }
+      ];
+
+      for (const col of orderColumns) {
+        try {
+          const exists = await client.query(`
+            SELECT column_name FROM information_schema.columns
+            WHERE table_name = $1 AND column_name = $2
+          `, [orderTableName, col.name]);
+
+          if (exists.rows.length === 0) {
+            const defaultClause = col.default ? `DEFAULT ${col.default}` : '';
+            await client.query(`
+              ALTER TABLE "${orderTableName}" 
+              ADD COLUMN "${col.name}" ${col.type} ${defaultClause}
+            `);
+            console.log(`   ✅ Agregada: ${col.name}`);
+            columnsAdded++;
+          } else {
+            console.log(`   ℹ️  Ya existe: ${col.name}`);
+          }
+        } catch (error) {
+          console.log(`   ❌ Error: ${col.name} - ${error.message}`);
+        }
+      }
+    } else {
+      console.log('   ⚠️  Tabla Order/orders no existe - saltando');
     }
 
     console.log(`\n📊 Total columnas agregadas: ${columnsAdded}`);
