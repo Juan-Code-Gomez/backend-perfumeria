@@ -169,9 +169,10 @@ async function main() {
       }
     }
     
-    // 2. Generar Prisma Client
+    // 2. Generar Prisma Client (FORZAR REGENERACIÓN)
     log('Generando Prisma Client...', 'blue');
-    if (!execCommand('npx prisma generate', 'Generar Prisma Client')) {
+    // Forzar regeneración limpia del cliente
+    if (!execCommand('npx prisma generate --force', 'Generar Prisma Client')) {
       throw new Error('Fallo al generar Prisma Client');
     }
     
