@@ -163,8 +163,10 @@ async function syncDatabase(dbConfig) {
       const orderTableName = orderTableCheck.rows[0].tablename;
       console.log(`   📌 Tabla encontrada: ${orderTableName}`);
 
+      // Agregar columnas faltantes
       const orderColumns = [
-        { name: 'totalAmount', type: 'DOUBLE PRECISION', default: null }
+        { name: 'totalAmount', type: 'DOUBLE PRECISION', default: null },
+        { name: 'customerName', type: 'TEXT', default: null }
       ];
 
       for (const col of orderColumns) {
@@ -188,6 +190,43 @@ async function syncDatabase(dbConfig) {
         } catch (error) {
           console.log(`   ❌ Error: ${col.name} - ${error.message}`);
         }
+      }
+
+      // Corregir tipo de columna status si es VARCHAR
+      try {
+        const statusType = await client.query(`
+          SELECT data_type FROM information_schema.columns
+          WHERE table_name = $1 AND column_name = 'status'
+        `, [orderTableName]);
+
+        if (statusType.rows.length > 0 && statusType.rows[0].data_type === 'character varying') {
+          console.log('   🔧 Corrigiendo tipo de columna status...');
+          
+          // Primero eliminar el default si existe
+          await client.query(`
+            ALTER TABLE "${orderTableName}" 
+            ALTER COLUMN "status" DROP DEFAULT
+          `);
+          
+          // Cambiar el tipo usando CAST
+          await client.query(`
+            ALTER TABLE "${orderTableName}" 
+            ALTER COLUMN "status" TYPE "OrderStatus" 
+            USING "status"::"OrderStatus"
+          `);
+          
+          // Restaurar el default
+          await client.query(`
+            ALTER TABLE "${orderTableName}" 
+            ALTER COLUMN "status" SET DEFAULT 'PENDING'::"OrderStatus"
+          `);
+          
+          console.log('   ✅ Tipo de status corregido a OrderStatus');
+        } else {
+          console.log('   ℹ️  Columna status ya tiene el tipo correcto');
+        }
+      } catch (error) {
+        console.log(`   ⚠️  No se pudo corregir status: ${error.message}`);
       }
     } else {
       console.log('   ⚠️  Tabla Order/orders no existe - saltando');
