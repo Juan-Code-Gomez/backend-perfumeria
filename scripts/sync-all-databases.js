@@ -100,6 +100,36 @@ async function syncDatabase(dbConfig) {
       }
     }
 
+    // ===== TABLA CashClosing =====
+    console.log('\n📋 Tabla: CashClosing');
+    
+    const cashClosingColumns = [
+      { name: 'cashSessionId', type: 'INTEGER', default: null }
+    ];
+
+    for (const col of cashClosingColumns) {
+      try {
+        const exists = await client.query(`
+          SELECT column_name FROM information_schema.columns
+          WHERE table_name = 'CashClosing' AND column_name = $1
+        `, [col.name]);
+
+        if (exists.rows.length === 0) {
+          const defaultClause = col.default ? `DEFAULT ${col.default}` : '';
+          await client.query(`
+            ALTER TABLE "CashClosing" 
+            ADD COLUMN "${col.name}" ${col.type} ${defaultClause}
+          `);
+          console.log(`   ✅ Agregada: ${col.name}`);
+          columnsAdded++;
+        } else {
+          console.log(`   ℹ️  Ya existe: ${col.name}`);
+        }
+      } catch (error) {
+        console.log(`   ❌ Error: ${col.name} - ${error.message}`);
+      }
+    }
+
     console.log(`\n📊 Total columnas agregadas: ${columnsAdded}`);
     
     await client.end();
