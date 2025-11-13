@@ -227,16 +227,20 @@ export class DashboardService {
       data?: any;
     }> = [];
     
-    // Stock bajo
-    const lowStockProducts = await this.prisma.product.findMany({
-      where: {
-        AND: [
-          { minStock: { not: null } },
-          { stock: { lte: this.prisma.product.fields.minStock } }
-        ]
-      },
-      take: 5
-    });
+    // Stock bajo - Usar SQL raw para comparar columnas
+    const lowStockProducts = await this.prisma.$queryRaw<Array<{
+      id: number;
+      name: string;
+      stock: number;
+      minStock: number;
+    }>>`
+      SELECT id, name, stock, "minStock"
+      FROM "Product"
+      WHERE "minStock" IS NOT NULL
+        AND stock <= "minStock"
+      ORDER BY stock ASC
+      LIMIT 5
+    `;
     
     if (lowStockProducts.length > 0) {
       alerts.push({
