@@ -75,6 +75,14 @@ export class SaleController {
     return this.saleService.getProfitabilityStats({ dateFrom, dateTo });
   }
 
+  @Get('analytics/discounts')
+  async getDiscountsReport(
+    @Query('dateFrom') dateFrom?: string,
+    @Query('dateTo') dateTo?: string,
+  ) {
+    return this.saleService.getDiscountsReport({ dateFrom, dateTo });
+  }
+
   // DELETE /sales/:id - Solo ADMIN y SUPER_ADMIN
   @Delete(':id')
   @UseGuards(JwtAuthGuard, RolesGuard)

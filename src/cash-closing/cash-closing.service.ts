@@ -29,48 +29,9 @@ export class CashClosingService {
 
       console.log(`🔍 Processing cash closing for date: ${startOfDay.toISOString()}`);
 
-      // Buscar cierre existente con validación mejorada
-      const existingClosing = await this.prisma.cashClosing.findFirst({
-        where: { 
-          date: {
-            gte: startOfDay,
-            lte: endOfDay
-          }
-        },
-        select: {
-          id: true,
-          date: true,
-          createdAt: true,
-          createdBy: {
-            select: { username: true, name: true }
-          }
-        }
-      });
-
-      if (existingClosing) {
-        console.log(`⚠️ Found existing cash closing:`, {
-          id: existingClosing.id,
-          date: existingClosing.date.toISOString(),
-          created: existingClosing.createdAt.toISOString(),
-          user: existingClosing.createdBy?.name || 'Sistema'
-        });
-        
-        const readableDate = startOfDay.toLocaleDateString('es-ES', {
-          weekday: 'long',
-          year: 'numeric', 
-          month: 'long', 
-          day: 'numeric'
-        });
-        
-        throw new BadRequestException(
-          `Ya existe un cierre de caja para ${readableDate}. ` +
-          `ID del cierre existente: ${existingClosing.id}, ` +
-          `creado el ${existingClosing.createdAt.toLocaleDateString('es-ES')} ` +
-          `por: ${existingClosing.createdBy?.name || 'Sistema'}. ` +
-          `Si necesitas modificarlo, edita el cierre existente en lugar de crear uno nuevo.`
-        );
-      }
-
+      // NOTA: Se permite múltiples cierres por día (diferentes turnos/sesiones)
+      // Validación de cierre existente removida para permitir flexibilidad operativa
+      
       // 1. Ventas del día - SOLO VENTAS PAGADAS
       const sales = await this.prisma.sale.findMany({
         where: { 
@@ -199,9 +160,13 @@ export class CashClosingService {
       }
 
       // Guarda el cierre
+      // NOTA: Agregamos milisegundos únicos para permitir múltiples cierres por día
+      const uniqueTimestamp = new Date(startOfDay);
+      uniqueTimestamp.setMilliseconds(new Date().getMilliseconds());
+      
       const cashClosing = await this.prisma.cashClosing.create({
         data: {
-          date: startOfDay,
+          date: uniqueTimestamp, // Usa timestamp único en lugar de startOfDay
           openingCash: data.openingCash || 0,
           closingCash: data.closingCash || 0,
           systemCash: Number(systemCash.toFixed(2)),

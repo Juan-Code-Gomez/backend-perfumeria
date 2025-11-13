@@ -532,6 +532,10 @@ export class OrderService {
           date: new Date(), // Fecha de confirmación (hoy)
           customerName: order.customerName,
           clientId: order.clientId,
+          subtotalAmount: order.totalAmount, // Sin descuento en pedidos
+          discountType: null,
+          discountValue: null,
+          discountAmount: 0,
           totalAmount: order.totalAmount,
           paidAmount: totalPayments,
           isPaid: totalPayments >= order.totalAmount,

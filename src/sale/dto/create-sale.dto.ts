@@ -49,6 +49,21 @@ export class CreateSaleDto {
   customerName?: string;
 
   @IsNumber()
+  subtotalAmount: number;
+
+  @IsOptional()
+  @IsString()
+  discountType?: string; // 'percentage' | 'fixed'
+
+  @IsOptional()
+  @IsNumber()
+  discountValue?: number;
+
+  @IsOptional()
+  @IsNumber()
+  discountAmount?: number;
+
+  @IsNumber()
   totalAmount: number;
 
   @IsNumber()

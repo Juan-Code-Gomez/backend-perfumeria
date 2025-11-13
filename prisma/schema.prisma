@@ -12,17 +12,19 @@ model User {
   username                String                  @unique
   password                String
   name                    String
-  companyCode             String?                 // Código de empresa para multi-tenant
   isActive                Boolean                 @default(true)
   createdAt               DateTime                @default(now())
   updatedAt               DateTime                @updatedAt
+  companyCode             String?
   cashClosings            CashClosing[]           @relation("UserCashClosings")
+  cashSessionsClosed      CashSession[]           @relation("CashSessionClosedBy")
+  cashSessionsOpened      CashSession[]           @relation("CashSessionOpenedBy")
   notifications           Notification[]
   notificationPreferences NotificationPreference? @relation("NotificationPreferences")
   roles                   UserRole[]
-  ordersCreated           Order[]                 @relation("OrderCreator")  // Pedidos creados por este usuario
-  ordersApproved          Order[]                 @relation("OrderApprover") // Pedidos aprobados por este usuario
-  orderHistory            OrderHistory[]          // Historial de cambios en pedidos
+  orderHistory            OrderHistory[]
+  ordersApproved          Order[]                 @relation("OrderApprover")
+  ordersCreated           Order[]                 @relation("OrderCreator")
 }
 
 model Role {
@@ -74,7 +76,6 @@ model Product {
   categoryId          Int
   unitId              Int
   stock               Float
-  reservedStock       Float              @default(0)  // Stock reservado por pedidos pendientes
   minStock            Float?
   purchasePrice       Float
   salePrice           Float
@@ -103,6 +104,7 @@ model Product {
   tags                String[]
   variantType         String?
   salesType           String             @default("VENTA")
+  reservedStock       Float              @default(0)
   creditNoteDetails   CreditNoteDetail[]
   InvoiceItem         InvoiceItem[]
   category            Category           @relation(fields: [categoryId], references: [id])
@@ -116,8 +118,8 @@ model Product {
   priceHistory        ProductPrice[]
   PurchaseDetail      PurchaseDetail[]
   SaleDetail          SaleDetail[]
+  OrderDetail         OrderDetail[]
   batches             ProductBatch[]     @relation("ProductBatches")
-  OrderDetail         OrderDetail[]      // Relación con pedidos
 
   @@index([sku])
   @@index([barcode])
@@ -198,33 +200,25 @@ model Purchase {
   id            Int              @id @default(autoincrement())
   supplierId    Int
   date          DateTime         @default(now())
-  
-  // Campos financieros
-  subtotal      Float            // Suma de (quantity * unitCost)
-  discount      Float            @default(0)
-  totalAmount   Float            // = subtotal - discount
+  totalAmount   Float
   paidAmount    Float            @default(0)
   isPaid        Boolean          @default(false)
-  
-  // Datos de la factura del proveedor (opcionales)
-  invoiceNumber String?          @unique
-  invoiceDate   DateTime?
-  dueDate       DateTime?        // Fecha de vencimiento para pago a crédito
-  
-  // Metadata
-  notes         String?
-  
   createdAt     DateTime         @default(now())
   updatedAt     DateTime         @updatedAt
+  subtotal      Float
+  discount      Float            @default(0)
+  invoiceNumber String?          @unique
+  invoiceDate   DateTime?
+  dueDate       DateTime?
+  notes         String?
   supplier      Supplier         @relation(fields: [supplierId], references: [id])
   details       PurchaseDetail[]
   batches       ProductBatch[]   @relation("PurchaseBatches")
-  
+
   @@index([invoiceNumber])
   @@index([invoiceDate])
   @@index([dueDate])
 }
-
 
 model PurchaseDetail {
   id         Int      @id @default(autoincrement())
@@ -249,25 +243,31 @@ model Client {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   sales     Sale[]
-  orders    Order[]  // Pedidos del cliente
+  orders    Order[]
 }
 
 model Sale {
-  id            Int           @id @default(autoincrement())
-  date          DateTime      @default(now())
-  customerName  String?
-  totalAmount   Float
-  paidAmount    Float
-  isPaid        Boolean       @default(false)
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
-  paymentMethod String?
-  clientId      Int?
-  creditNote    CreditNote?
-  client        Client?       @relation(fields: [clientId], references: [id])
-  details       SaleDetail[]
-  payments      SalePayment[]
-  order         Order?        // Relación con pedido original (si la venta viene de un pedido)
+  id             Int           @id @default(autoincrement())
+  date           DateTime      @default(now())
+  customerName   String?
+  totalAmount    Float
+  paidAmount     Float
+  isPaid         Boolean       @default(false)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  paymentMethod  String?
+  clientId       Int?
+  discountAmount Float         @default(0)
+  discountType   String?
+  discountValue  Float?
+  subtotalAmount Float
+  cashSessionId  Int?
+  creditNote     CreditNote?
+  cashSession    CashSession?  @relation("CashSessionSales", fields: [cashSessionId], references: [id])
+  client         Client?       @relation(fields: [clientId], references: [id])
+  details        SaleDetail[]
+  payments       SalePayment[]
+  order          Order?
 }
 
 model SaleDetail {
@@ -298,9 +298,33 @@ model ProductMovement {
   product   Product      @relation(fields: [productId], references: [id])
 }
 
+model CashSession {
+  id            Int           @id @default(autoincrement())
+  sessionNumber Int
+  date          DateTime
+  openedAt      DateTime      @default(now())
+  closedAt      DateTime?
+  openingCash   Float         @default(0)
+  closingCash   Float?
+  isActive      Boolean       @default(true)
+  openedById    Int?
+  closedById    Int?
+  notes         String?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  cashClosings  CashClosing[] @relation("CashSessionClosings")
+  closedBy      User?         @relation("CashSessionClosedBy", fields: [closedById], references: [id])
+  openedBy      User?         @relation("CashSessionOpenedBy", fields: [openedById], references: [id])
+  expenses      Expense[]     @relation("CashSessionExpenses")
+  sales         Sale[]        @relation("CashSessionSales")
+
+  @@index([date, sessionNumber])
+  @@index([isActive])
+}
+
 model CashClosing {
-  id            Int      @id @default(autoincrement())
-  date          DateTime @unique
+  id            Int          @id @default(autoincrement())
+  date          DateTime
   openingCash   Float
   closingCash   Float
   systemCash    Float
@@ -314,9 +338,11 @@ model CashClosing {
   totalExpense  Float
   totalPayments Float
   notes         String?
-  createdAt     DateTime @default(now())
+  createdAt     DateTime     @default(now())
   createdById   Int?
-  createdBy     User?    @relation("UserCashClosings", fields: [createdById], references: [id])
+  cashSessionId Int?
+  cashSession   CashSession? @relation("CashSessionClosings", fields: [cashSessionId], references: [id])
+  createdBy     User?        @relation("UserCashClosings", fields: [createdById], references: [id])
 }
 
 model Expense {
@@ -331,6 +357,8 @@ model Expense {
   category           ExpenseCategory
   paymentMethod      String?
   recurringExpenseId Int?
+  cashSessionId      Int?
+  cashSession        CashSession?      @relation("CashSessionExpenses", fields: [cashSessionId], references: [id])
   recurringExpense   RecurringExpense? @relation("RecurringExpenses", fields: [recurringExpenseId], references: [id])
 }
 
@@ -475,7 +503,6 @@ model Invoice {
   paidAmount          Float            @default(0)
   status              String           @default("PENDING")
   description         String?
-  notes               String?          // Notas adicionales
   invoiceDate         DateTime
   dueDate             DateTime?
   createdAt           DateTime         @default(now())
@@ -487,6 +514,7 @@ model Invoice {
   originalDocument    String?
   pricesAnalyzed      Boolean          @default(false)
   supplierId          Int?
+  notes               String?
   Supplier            Supplier?        @relation(fields: [supplierId], references: [id])
   InvoiceItem         InvoiceItem[]
   InvoicePayment      InvoicePayment[]
@@ -505,7 +533,7 @@ model InvoicePayment {
   paymentDate   DateTime @default(now())
   paymentMethod String?
   notes         String?
-  expenseId     Int?     @unique // Relación con el gasto generado
+  expenseId     Int?     @unique
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
   invoice       Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
@@ -600,6 +628,109 @@ model InvoiceItem {
   @@index([productId])
 }
 
+model SystemParameter {
+  id             Int      @id @default(autoincrement())
+  parameterKey   String   @unique @map("parameter_key")
+  parameterValue Boolean  @default(false) @map("parameter_value")
+  parameterType  String   @default("boolean") @map("parameter_type")
+  stringValue    String?  @map("string_value")
+  numberValue    Decimal? @map("number_value")
+  jsonValue      Json?    @map("json_value")
+  description    String?
+  category       String?  @default("general")
+  isActive       Boolean  @default(true) @map("is_active")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+  companyId      Int?     @map("company_id")
+
+  @@map("system_parameters")
+}
+
+model ProductBatch {
+  id           Int       @id @default(autoincrement())
+  productId    Int       @map("product_id")
+  purchaseId   Int?      @map("purchase_id")
+  quantity     Float
+  remainingQty Float     @map("remaining_qty")
+  unitCost     Float     @map("unit_cost")
+  purchaseDate DateTime  @map("purchase_date")
+  expiryDate   DateTime? @map("expiry_date")
+  batchNumber  String?   @map("batch_number")
+  notes        String?
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+  product      Product   @relation("ProductBatches", fields: [productId], references: [id], onDelete: Cascade)
+  purchase     Purchase? @relation("PurchaseBatches", fields: [purchaseId], references: [id])
+
+  @@index([productId, purchaseDate])
+  @@index([productId, remainingQty])
+  @@index([expiryDate])
+  @@map("product_batches")
+}
+
+model Order {
+  id           Int            @id @default(autoincrement())
+  orderNumber  String         @unique
+  orderDate    DateTime       @default(now())
+  status       OrderStatus    @default(PENDING)
+  totalAmount  Float
+  customerName String?
+  clientId     Int?
+  notes        String?
+  createdById  Int
+  approvedById Int?
+  approvedAt   DateTime?
+  saleId       Int?           @unique
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  details      OrderDetail[]
+  history      OrderHistory[]
+  approvedBy   User?          @relation("OrderApprover", fields: [approvedById], references: [id])
+  client       Client?        @relation(fields: [clientId], references: [id])
+  createdBy    User           @relation("OrderCreator", fields: [createdById], references: [id])
+  sale         Sale?          @relation(fields: [saleId], references: [id])
+
+  @@index([status])
+  @@index([orderDate])
+  @@index([createdById])
+  @@index([approvedById])
+  @@map("orders")
+}
+
+model OrderDetail {
+  id          Int      @id @default(autoincrement())
+  orderId     Int
+  productId   Int
+  quantity    Float
+  originalQty Float?
+  unitPrice   Float
+  totalPrice  Float
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  order       Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product     Product  @relation(fields: [productId], references: [id])
+
+  @@index([orderId])
+  @@index([productId])
+  @@map("order_details")
+}
+
+model OrderHistory {
+  id        Int      @id @default(autoincrement())
+  orderId   Int
+  action    String
+  userId    Int
+  changes   Json?
+  notes     String?
+  timestamp DateTime @default(now())
+  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id])
+
+  @@index([orderId])
+  @@index([action])
+  @@map("order_history")
+}
+
 enum MovementType {
   IN
   OUT
@@ -610,8 +741,8 @@ enum ExpenseCategory {
   SERVICIOS
   SUMINISTROS
   ALQUILER
-  SUPPLIER_PAYMENT
   OTRO
+  SUPPLIER_PAYMENT
 }
 
 enum NotificationType {
@@ -649,128 +780,8 @@ enum NotificationFrequency {
   WEEKLY
 }
 
-model SystemParameter {
-  id            Int      @id @default(autoincrement())
-  companyId     Int?     @map("company_id") // Para multi-tenant en el futuro
-  parameterKey  String   @unique @map("parameter_key")
-  parameterValue Boolean @default(false) @map("parameter_value")
-  parameterType String   @default("boolean") @map("parameter_type")
-  stringValue   String?  @map("string_value")
-  numberValue   Decimal? @map("number_value")
-  jsonValue     Json?    @map("json_value")
-  description   String?
-  category      String?  @default("general")
-  isActive      Boolean  @default(true) @map("is_active")
-  createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt     DateTime @updatedAt @map("updated_at")
-
-  @@map("system_parameters")
-}
-
-model ProductBatch {
-  id            Int      @id @default(autoincrement())
-  productId     Int      @map("product_id")
-  purchaseId    Int?     @map("purchase_id")
-  quantity      Float    // Cantidad inicial del lote
-  remainingQty  Float    @map("remaining_qty") // Cantidad disponible
-  unitCost      Float    @map("unit_cost") // Costo unitario de este lote
-  purchaseDate  DateTime @map("purchase_date") // Fecha de compra (para FIFO)
-  expiryDate    DateTime? @map("expiry_date") // Opcional: fecha de vencimiento
-  batchNumber   String?  @map("batch_number") // Opcional: número de lote del proveedor
-  notes         String?  // Notas adicionales
-  createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt     DateTime @updatedAt @map("updated_at")
-  
-  product       Product  @relation("ProductBatches", fields: [productId], references: [id], onDelete: Cascade)
-  purchase      Purchase? @relation("PurchaseBatches", fields: [purchaseId], references: [id], onDelete: SetNull)
-
-  @@index([productId, purchaseDate]) // Índice compuesto para búsqueda FIFO
-  @@index([productId, remainingQty]) // Índice para buscar lotes con stock
-  @@index([expiryDate]) // Índice para alertas de vencimiento
-    @@map("product_batches")
-}
-
-// ========================================
-// MODELOS DE PEDIDOS (Orders)
-// ========================================
-
-model Order {
-  id            Int           @id @default(autoincrement())
-  orderNumber   String        @unique  // OD-0001, OD-0002, etc.
-  orderDate     DateTime      @default(now())  // Fecha en que se creó el pedido
-  status        OrderStatus   @default(PENDING)
-  totalAmount   Float
-  customerName  String?
-  clientId      Int?
-  notes         String?       // Observaciones del vendedor al crear el pedido
-  
-  // Auditoría
-  createdById   Int           // VENDEDOR que creó el pedido
-  approvedById  Int?          // BODEGA/CAJERO/ADMIN que aprobó
-  approvedAt    DateTime?     // Fecha y hora de aprobación
-  
-  // Relación con venta (cuando se confirma el pedido)
-  saleId        Int?          @unique
-  
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
-  
-  client        Client?       @relation(fields: [clientId], references: [id])
-  createdBy     User          @relation("OrderCreator", fields: [createdById], references: [id])
-  approvedBy    User?         @relation("OrderApprover", fields: [approvedById], references: [id])
-  sale          Sale?         @relation(fields: [saleId], references: [id])
-  details       OrderDetail[]
-  history       OrderHistory[] // Log de cambios (creación, edición, aprobación, cancelación)
-  
-  @@index([status])
-  @@index([orderDate])
-  @@index([createdById])
-  @@index([approvedById])
-  @@map("orders")
-}
-
-model OrderDetail {
-  id             Int      @id @default(autoincrement())
-  orderId        Int
-  productId      Int
-  quantity       Float    // Cantidad solicitada (puede ser editada antes de aprobar)
-  originalQty    Float?   // Cantidad original del pedido (para auditoría)
-  unitPrice      Float
-  totalPrice     Float
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-  
-  order          Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  product        Product  @relation(fields: [productId], references: [id])
-  
-  @@index([orderId])
-  @@index([productId])
-  @@map("order_details")
-}
-
-model OrderHistory {
-  id          Int      @id @default(autoincrement())
-  orderId     Int
-  action      String   // CREATED, EDITED, APPROVED, CANCELLED
-  userId      Int      // Usuario que realizó la acción
-  changes     Json?    // Qué cambió (para EDITED: {"productId": 1, "from": 10, "to": 5})
-  notes       String?  // Notas adicionales
-  timestamp   DateTime @default(now())
-  
-  order       Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  user        User     @relation(fields: [userId], references: [id])
-  
-  @@index([orderId])
-  @@index([action])
-  @@map("order_history")
-}
-
 enum OrderStatus {
-  PENDING      // Pedido pendiente de aprobación
-  APPROVED     // Aprobado y convertido en venta
-  CANCELLED    // Cancelado/Rechazado
+  PENDING
+  APPROVED
+  CANCELLED
 }
-
-// ========================================
-// FIN MODELOS DE PEDIDOS
-// ========================================

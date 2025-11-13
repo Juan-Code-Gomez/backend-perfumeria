@@ -135,15 +135,25 @@ export class SaleService {
         })
       );
 
+      // Buscar sesión de caja activa para asociar la venta
+      const activeSession = await tx.cashSession.findFirst({
+        where: { isActive: true }
+      });
+
       const sale = await tx.sale.create({
         data: {
           date: data.date ? parseLocalDate(data.date) : new Date(),
           customerName: data.customerName,
           clientId: data.clientId,
+          subtotalAmount: data.subtotalAmount,
+          discountType: data.discountType,
+          discountValue: data.discountValue,
+          discountAmount: data.discountAmount || 0,
           totalAmount: data.totalAmount,
           paidAmount: paidAmount,
           isPaid,
           paymentMethod: data.paymentMethod, // Mantener para compatibilidad
+          cashSessionId: activeSession?.id, // Asociar con sesión activa si existe
           details: {
             create: detailsWithProfit,
           },
@@ -152,6 +162,13 @@ export class SaleService {
           details: { include: { product: true } },
         },
       });
+
+      // Log de sesión asociada
+      if (activeSession) {
+        console.log(`💰 Sale associated with cash session #${activeSession.sessionNumber} (ID: ${activeSession.id})`);
+      } else {
+        console.log('⚠️ No active cash session found - sale created without session association');
+      }
 
       // Crear múltiples pagos si se proporcionan
       if (data.payments && data.payments.length > 0) {
@@ -390,15 +407,16 @@ export class SaleService {
       const dayStart = new Date(abonoDate);
       dayStart.setHours(0, 0, 0, 0);
 
-      // Intenta actualizar un CashClosing ya existente
-      const existingClosing = await tx.cashClosing.findUnique({
+      // Intenta actualizar un CashClosing ya existente (buscar el más reciente del día)
+      const existingClosing = await tx.cashClosing.findFirst({
         where: { date: dayStart },
+        orderBy: { createdAt: 'desc' }
       });
 
       if (existingClosing) {
         // Suma al totalIncome
         await tx.cashClosing.update({
-          where: { date: dayStart },
+          where: { id: existingClosing.id },
           data: { totalIncome: { increment: payment.amount } },
         });
       } else {
@@ -927,5 +945,126 @@ export class SaleService {
         })),
       };
     });
+  }
+
+  // 📊 Reporte de Descuentos
+  async getDiscountsReport(params: { dateFrom?: string; dateTo?: string }) {
+    console.log('📊 Generando reporte de descuentos:', params);
+
+    const { dateFrom, dateTo } = params;
+    
+    const whereClause: any = {
+      discountAmount: {
+        gt: 0, // Solo ventas con descuento
+      },
+    };
+
+    if (dateFrom && dateTo) {
+      const startDate = startOfDay(dateFrom);
+      const endDate = endOfDay(dateTo);
+      
+      whereClause.date = {
+        gte: startDate,
+        lte: endDate,
+      };
+    }
+
+    // Obtener ventas con descuentos
+    const salesWithDiscounts = await this.prisma.sale.findMany({
+      where: whereClause,
+      select: {
+        id: true,
+        date: true,
+        customerName: true,
+        subtotalAmount: true,
+        discountType: true,
+        discountValue: true,
+        discountAmount: true,
+        totalAmount: true,
+        client: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+      },
+      orderBy: {
+        date: 'desc',
+      },
+    });
+
+    // Calcular estadísticas de resumen
+    const totalSales = salesWithDiscounts.length;
+    const totalDiscountAmount = salesWithDiscounts.reduce(
+      (sum, sale) => sum + (sale.discountAmount || 0), 
+      0
+    );
+    const totalSubtotalAmount = salesWithDiscounts.reduce(
+      (sum, sale) => sum + (sale.subtotalAmount || 0), 
+      0
+    );
+    const totalFinalAmount = salesWithDiscounts.reduce(
+      (sum, sale) => sum + sale.totalAmount, 
+      0
+    );
+
+    // Estadísticas por tipo de descuento
+    const discountsByType = salesWithDiscounts.reduce((acc, sale) => {
+      const type = sale.discountType || 'unknown';
+      if (!acc[type]) {
+        acc[type] = {
+          count: 0,
+          totalDiscountAmount: 0,
+          totalSubtotal: 0,
+        };
+      }
+      acc[type].count++;
+      acc[type].totalDiscountAmount += sale.discountAmount || 0;
+      acc[type].totalSubtotal += sale.subtotalAmount || 0;
+      return acc;
+    }, {} as Record<string, any>);
+
+    // Top clientes con más descuentos
+    const topCustomers = salesWithDiscounts.reduce((acc, sale) => {
+      const customerName = sale.customerName || sale.client?.name || 'Cliente sin nombre';
+      if (!acc[customerName]) {
+        acc[customerName] = {
+          name: customerName,
+          totalDiscount: 0,
+          salesCount: 0,
+        };
+      }
+      acc[customerName].totalDiscount += sale.discountAmount || 0;
+      acc[customerName].salesCount++;
+      return acc;
+    }, {} as Record<string, any>);
+
+    const topCustomersList = Object.values(topCustomers)
+      .sort((a: any, b: any) => b.totalDiscount - a.totalDiscount)
+      .slice(0, 10);
+
+    return {
+      success: true,
+      data: {
+        summary: {
+          totalSales,
+          totalDiscountAmount,
+          totalSubtotalAmount,
+          totalFinalAmount,
+          averageDiscountAmount: totalSales > 0 ? totalDiscountAmount / totalSales : 0,
+          discountPercentageOfSubtotal: totalSubtotalAmount > 0 ? (totalDiscountAmount / totalSubtotalAmount) * 100 : 0,
+        },
+        discountsByType,
+        topCustomers: topCustomersList,
+        salesWithDiscounts: salesWithDiscounts.map(sale => ({
+          ...sale,
+          customerDisplayName: sale.customerName || sale.client?.name || 'Cliente sin nombre',
+        })),
+        period: {
+          from: dateFrom || null,
+          to: dateTo || null,
+        },
+      },
+    };
   }
 }
