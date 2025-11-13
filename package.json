@@ -16,6 +16,7 @@
     "start:dev": "nest start --watch",
     "start:debug": "nest start --debug --watch",
     "start:prod": "node dist/src/main.js",
+    "postinstall": "prisma generate",
     "deploy": "prisma generate && prisma migrate deploy && npm run build",
     "postdeploy": "prisma db seed",
     "railway:build": "npm run build",

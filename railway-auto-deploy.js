@@ -169,19 +169,8 @@ async function main() {
       }
     }
     
-    // 2. Limpiar y regenerar Prisma Client
-    log('Limpiando caché de Prisma Client...', 'blue');
-    try {
-      execSync('rm -rf node_modules/.prisma node_modules/@prisma/client', { 
-        encoding: 'utf-8',
-        stdio: 'inherit'
-      });
-      log('✓ Caché limpiado', 'green');
-    } catch (error) {
-      log('⚠️  No se pudo limpiar caché (puede no existir)', 'yellow');
-    }
-    
-    log('Generando Prisma Client...', 'blue');
+    // 2. Generar Prisma Client (postinstall ya lo hace, pero por si acaso)
+    log('Verificando Prisma Client...', 'blue');
     if (!execCommand('npx prisma generate', 'Generar Prisma Client')) {
       throw new Error('Fallo al generar Prisma Client');
     }
