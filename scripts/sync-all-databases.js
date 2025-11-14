@@ -167,7 +167,8 @@ async function syncDatabase(dbConfig) {
       const orderColumns = [
         { name: 'totalAmount', type: 'DOUBLE PRECISION', default: null },
         { name: 'customerName', type: 'TEXT', default: null },
-        { name: 'createdById', type: 'INTEGER REFERENCES "User"(id)', default: null }
+        { name: 'createdById', type: 'INTEGER REFERENCES "User"(id)', default: null },
+        { name: 'approvedById', type: 'INTEGER REFERENCES "User"(id)', default: null }
       ];
 
       for (const col of orderColumns) {
