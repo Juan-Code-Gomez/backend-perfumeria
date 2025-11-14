@@ -169,7 +169,8 @@ async function syncDatabase(dbConfig) {
         { name: 'customerName', type: 'TEXT', default: null },
         { name: 'createdById', type: 'INTEGER REFERENCES "User"(id)', default: null },
         { name: 'approvedById', type: 'INTEGER REFERENCES "User"(id)', default: null },
-        { name: 'approvedAt', type: 'TIMESTAMP(3)', default: null }
+        { name: 'approvedAt', type: 'TIMESTAMP(3)', default: null },
+        { name: 'saleId', type: 'INTEGER REFERENCES "Sale"(id)', default: null }
       ];
 
       for (const col of orderColumns) {
