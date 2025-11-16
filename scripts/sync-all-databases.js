@@ -170,7 +170,14 @@ async function syncDatabase(dbConfig) {
         { name: 'createdById', type: 'INTEGER REFERENCES "User"(id)', default: null },
         { name: 'approvedById', type: 'INTEGER REFERENCES "User"(id)', default: null },
         { name: 'approvedAt', type: 'TIMESTAMP(3)', default: null },
-        { name: 'saleId', type: 'INTEGER REFERENCES "Sale"(id)', default: null }
+        { name: 'saleId', type: 'INTEGER REFERENCES "Sale"(id)', default: null },
+        { name: 'clientId', type: 'INTEGER REFERENCES "Client"(id)', default: null },
+        { name: 'userId', type: 'INTEGER REFERENCES "User"(id)', default: null },
+        { name: 'deliveryDate', type: 'TIMESTAMP(3)', default: null },
+        { name: 'subtotal', type: 'DOUBLE PRECISION', default: null },
+        { name: 'tax', type: 'DOUBLE PRECISION', default: null },
+        { name: 'discount', type: 'DOUBLE PRECISION', default: null },
+        { name: 'total', type: 'DOUBLE PRECISION', default: null }
       ];
 
       for (const col of orderColumns) {
