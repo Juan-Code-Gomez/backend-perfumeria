@@ -90,7 +90,7 @@ export class ProductsController {
   @Post('bulk-upload')
   @UseInterceptors(
     FileInterceptor('file', {
-      limits: { fileSize: 2 * 1024 * 1024 }, // 2 MB (ajusta si quieres)
+      limits: { fileSize: 10 * 1024 * 1024 }, // 10 MB
       fileFilter: (req, file, cb) => {
         console.log('🔍 FileFilter - Archivo recibido:', {
           originalname: file.originalname,

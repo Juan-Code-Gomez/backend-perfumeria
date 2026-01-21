@@ -1,0 +1,216 @@
+📝 NOTAS IMPORTANTES - NUEVO CLIENTE RAILWAY (TROLLEY)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+✅ CORS YA CONFIGURADO
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+La URL del frontend ya está agregada en src/main.ts:
+
+   'https://perfumeria-sistema-production-1f4b.up.railway.app'
+
+No necesitas modificar el código del backend.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🔑 URLS IMPORTANTES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Base de datos (externa - para setup local):
+postgresql://postgres:wGcAKDSKDggpmWPulURTqPDEYOPovsPy@trolley.proxy.rlwy.net:45234/railway
+
+Base de datos (interna - para Railway):
+postgresql://postgres:wGcAKDSKDggpmWPulURTqPDEYOPovsPy@postgres.railway.internal:5432/railway
+
+⚠️ En Railway, SIEMPRE usar la URL INTERNA para mejor performance.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+⚡ EJECUTAR SETUP (ELIGE UNA OPCIÓN)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+OPCIÓN 1 - Script PowerShell (Recomendado):
+   .\setup-client-trolley.ps1
+
+OPCIÓN 2 - Railway CLI:
+   railway run npm run setup:new-client
+
+OPCIÓN 3 - Manual:
+   $env:DATABASE_URL="postgresql://postgres:wGcAKD...@trolley.proxy.rlwy.net:45234/railway"
+   npx prisma migrate deploy
+   npx prisma db seed
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🌍 VARIABLES DE ENTORNO REQUERIDAS EN RAILWAY
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Backend (backend-perfumeria):
+┌────────────────────────────────────────────────────────┐
+│ DATABASE_URL    → URL interna (postgres.railway...)   │
+│ JWT_SECRET      → perfumeria-super-secret-key...      │
+│ JWT_EXPIRES_IN  → 7d                                   │
+│ PORT            → 3000                                  │
+│ NODE_ENV        → production                           │
+│ TZ              → America/Bogota ⚠️ CRÍTICO           │
+└────────────────────────────────────────────────────────┘
+
+Frontend (perfumeria-sistema):
+┌────────────────────────────────────────────────────────┐
+│ VITE_API_URL    → https://backend-perfumeria-         │
+│                   production-2dce.up.railway.app/api   │
+└────────────────────────────────────────────────────────┘
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🎯 CREDENCIALES INICIALES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Usuario administrador (creado por el seed):
+
+   Username:  admin
+   Password:  Admin123!
+   Rol:       SUPER_ADMIN
+
+🔒 IMPORTANTE: Cambiar la contraseña después del primer login.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📊 LO QUE SE CREA AUTOMÁTICAMENTE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+✅ 36+ Tablas del schema:
+   - User, Role, UserRole
+   - Product, Category, Unit, Supplier
+   - Sale, SaleDetail, Purchase
+   - Invoice, Expense, CashClosing
+   - Notification, Order, ProductBatch
+   - etc.
+
+✅ Datos iniciales:
+   - 4 Roles (SUPER_ADMIN, ADMIN, VENDEDOR, USER)
+   - 1 Usuario admin
+   - Módulos del sistema con permisos
+   - Categorías básicas
+   - Unidades de medida estándar
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🧪 PRUEBAS POSTERIORES AL SETUP
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1. Login en frontend
+   → https://perfumeria-sistema-production-1f4b.up.railway.app/login
+   → Usar: admin / Admin123!
+
+2. Dashboard debe cargar
+   → Debe mostrar métricas (probablemente en cero)
+
+3. Módulos deben estar accesibles
+   → Productos, Ventas, Compras, etc.
+
+4. Crear un producto de prueba
+   → Ir a Productos → Nuevo
+   → Verificar que se guarda correctamente
+
+5. Hacer una venta de prueba
+   → Ir a POS
+   → Hacer venta
+   → Verificar que la fecha es correcta ⚠️
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+⚠️ PROBLEMA COMÚN: FECHAS INCORRECTAS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Si las ventas se guardan con fecha incorrecta:
+
+CAUSA: Variable TZ no configurada en Railway
+
+SOLUCIÓN:
+   1. Railway → backend-perfumeria → Variables
+   2. Agregar: TZ = America/Bogota
+   3. Railway hará redeploy automático
+   4. Esperar 2-3 minutos
+   5. Probar nuevamente
+
+Ver guía completa: SOLUCION_TIMEZONE_RAILWAY.md
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🔍 VERIFICAR BASE DE DATOS (Opcional)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Con Prisma Studio:
+
+   $env:DATABASE_URL="postgresql://postgres:wGcAKD...@trolley.proxy.rlwy.net:45234/railway"
+   npx prisma studio
+
+Abre en: http://localhost:5555
+
+Debes ver:
+   ✅ Tabla User con 1 registro (admin)
+   ✅ Tabla Role con 4 registros
+   ✅ Tabla SystemModule con registros
+   ✅ Etc.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📞 COMANDOS ÚTILES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+# Ver logs del backend
+railway logs --service backend-perfumeria --follow
+
+# Ver variables configuradas
+railway variables --service backend-perfumeria
+
+# Ejecutar seed nuevamente (si es necesario)
+railway run npx prisma db seed
+
+# Conectar a PostgreSQL
+railway connect postgres
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+✅ CHECKLIST COMPLETO
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+PRE-SETUP:
+[ ] Script setup-client-trolley.ps1 disponible
+[ ] Railway CLI instalado (si usas opción 2)
+
+SETUP:
+[ ] Migraciones ejecutadas (prisma migrate deploy)
+[ ] Seed ejecutado (prisma db seed)
+[ ] Tablas creadas verificadas
+
+CONFIGURACIÓN RAILWAY:
+[ ] DATABASE_URL configurada (backend)
+[ ] JWT_SECRET configurada (backend)
+[ ] TZ=America/Bogota configurada (backend) ⚠️
+[ ] VITE_API_URL configurada (frontend)
+
+VERIFICACIÓN:
+[ ] Login funciona con admin/Admin123!
+[ ] Dashboard carga sin errores
+[ ] Módulos son accesibles
+[ ] Crear producto funciona
+[ ] Hacer venta funciona
+[ ] Fecha de venta es correcta
+
+OPCIONAL:
+[ ] Cambiar contraseña del admin
+[ ] Crear usuarios adicionales
+[ ] Configurar roles y permisos
+[ ] Agregar categorías personalizadas
+[ ] Agregar proveedores
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📅 Fecha: 20 de Enero, 2026
+📍 Cliente: Nuevo (Bodega)
+🗄️  BD: Railway - trolley (45234)
+📦 Estado: Listo para configurar
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
