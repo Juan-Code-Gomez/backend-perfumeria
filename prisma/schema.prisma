@@ -561,6 +561,17 @@ model CompanyConfig {
   timezone         String   @default("America/Bogota")
   dateFormat       String   @default("DD/MM/YYYY")
   numberFormat     String   @default("es-CO")
+  // Configuración de visualización de ticket POS
+  showLogo         Boolean  @default(true)
+  showNIT          Boolean  @default(true)
+  showAddress      Boolean  @default(true)
+  showPhone        Boolean  @default(true)
+  showEmail        Boolean  @default(true)
+  showWebsite      Boolean  @default(true)
+  ticketWidth      String   @default("80mm")
+  fontSize         String   @default("medium")
+  includeVendor    Boolean  @default(true)
+  includeCashSession Boolean @default(false)
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 

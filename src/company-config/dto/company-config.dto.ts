@@ -70,6 +70,47 @@ export class CreateCompanyConfigDto {
   @IsOptional()
   @IsString()
   numberFormat?: string;
+
+  // Configuración de visualización de ticket POS
+  @IsOptional()
+  @IsBoolean()
+  showLogo?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  showNIT?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  showAddress?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  showPhone?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  showEmail?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  showWebsite?: boolean;
+
+  @IsOptional()
+  @IsString()
+  ticketWidth?: string;
+
+  @IsOptional()
+  @IsString()
+  fontSize?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  includeVendor?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  includeCashSession?: boolean;
 }
 
 export class UpdateCompanyConfigDto {
@@ -133,13 +174,50 @@ export class UpdateCompanyConfigDto {
 
   @IsOptional()
   @IsString()
-  timezone?: string;
-
-  @IsOptional()
-  @IsString()
   dateFormat?: string;
 
   @IsOptional()
   @IsString()
   numberFormat?: string;
+
+  // Configuración de visualización de ticket POS
+  @IsOptional()
+  @IsBoolean()
+  showLogo?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  showNIT?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  showAddress?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  showPhone?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  showEmail?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  showWebsite?: boolean;
+
+  @IsOptional()
+  @IsString()
+  ticketWidth?: string;
+
+  @IsOptional()
+  @IsString()
+  fontSize?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  includeVendor?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  includeCashSession?: boolean;
 }
