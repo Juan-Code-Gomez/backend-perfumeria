@@ -174,6 +174,10 @@ export class UpdateCompanyConfigDto {
 
   @IsOptional()
   @IsString()
+  timezone?: string;
+
+  @IsOptional()
+  @IsString()
   dateFormat?: string;
 
   @IsOptional()

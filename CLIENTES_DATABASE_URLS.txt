@@ -1,0 +1,31 @@
+# 📝 CONFIGURACIÓN DE BASES DE DATOS DE CLIENTES
+# Copia las URLs de conexión de cada cliente aquí
+
+# Formato:
+# postgresql://USER:PASSWORD@HOST:PORT/DATABASE
+
+# ========================================
+# CLIENTES ACTIVOS
+# ========================================
+
+# Cliente 1 - Principal (Turntable)
+DATABASE_URL_PRINCIPAL=postgresql://postgres:PASSWORD@turntable.proxy.rlwy.net:38668/railway
+
+# Cliente 2 - Trolley
+DATABASE_URL_TROLLEY=postgresql://postgres:PASSWORD@trolley.proxy.rlwy.net:45234/railway
+
+# Cliente 3 - (Agregar nombre)
+# DATABASE_URL_CLIENTE3=postgresql://postgres:PASSWORD@HOST:PORT/railway
+
+# Cliente 4 - (Agregar nombre)
+# DATABASE_URL_CLIENTE4=postgresql://postgres:PASSWORD@HOST:PORT/railway
+
+# ========================================
+# INSTRUCCIONES:
+# ========================================
+# 1. Descomenta las líneas y agrega las URLs correctas
+# 2. Reemplaza PASSWORD con la contraseña correcta
+# 3. Reemplaza HOST con el host de Railway
+# 4. Reemplaza PORT con el puerto de Railway
+# 5. Guarda este archivo
+# 6. Ejecuta: node apply-ticket-config-to-all-clients.js
