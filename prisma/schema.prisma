@@ -727,15 +727,16 @@ model OrderDetail {
 }
 
 model OrderHistory {
-  id        Int      @id @default(autoincrement())
-  orderId   Int
-  action    String
-  userId    Int
-  changes   Json?
-  notes     String?
-  timestamp DateTime @default(now())
-  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  user      User     @relation(fields: [userId], references: [id])
+  id             Int       @id @default(autoincrement())
+  orderId        Int
+  action         String
+  userId         Int
+  previousStatus String?
+  newStatus      String?
+  changes        String?
+  createdAt      DateTime  @default(now())
+  order          Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  user           User      @relation(fields: [userId], references: [id])
 
   @@index([orderId])
   @@index([action])

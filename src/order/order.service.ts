@@ -86,17 +86,17 @@ export class OrderService {
       const order = await tx.order.create({
         data: {
           orderNumber,
-          customerName: data.customerName,
-          clientId: data.clientId,
+          customerName: data.customerName || null,
+          clientId: data.clientId || null,
           totalAmount: data.totalAmount,
-          notes: data.notes,
+          notes: data.notes || null,
           status: OrderStatus.PENDING,
           createdById: userId,
           details: {
             create: data.details.map(d => ({
               productId: d.productId,
               quantity: d.quantity,
-              originalQty: d.quantity, // Guardamos cantidad original para auditoría
+              originalQty: d.quantity,
               unitPrice: d.unitPrice,
               totalPrice: d.totalPrice,
             })),
@@ -116,6 +116,8 @@ export class OrderService {
         },
       });
 
+      console.log(`✅ Pedido ${orderNumber} creado exitosamente`);
+
       // 5. RESERVAR stock en cada producto
       for (const detail of data.details) {
         await tx.product.update({
@@ -134,11 +136,12 @@ export class OrderService {
           orderId: order.id,
           action: 'CREATED',
           userId,
-          notes: `Pedido creado: ${data.details.length} producto(s)`,
+          changes: `Pedido creado: ${data.details.length} producto(s)`,
         },
       });
 
       console.log(`✅ Pedido ${orderNumber} creado exitosamente`);
+      
       return order;
     });
   }
@@ -214,7 +217,7 @@ export class OrderService {
               select: { id: true, name: true, username: true },
             },
           },
-          orderBy: { timestamp: 'desc' },
+          orderBy: { createdAt: 'desc' },
         },
       },
     });
@@ -402,8 +405,7 @@ export class OrderService {
             orderId: id,
             action: 'EDITED',
             userId,
-            changes: changes,
-            notes: `Pedido editado: ${changes.length} cambio(s)`,
+            changes: JSON.stringify(changes),
           },
         });
       }
@@ -425,7 +427,7 @@ export class OrderService {
                 select: { id: true, name: true },
               },
             },
-            orderBy: { timestamp: 'desc' },
+            orderBy: { createdAt: 'desc' },
           },
         },
       });
@@ -602,7 +604,9 @@ export class OrderService {
           orderId: id,
           action: 'APPROVED',
           userId,
-          notes: `Pedido aprobado y convertido en venta #${sale.id}`,
+          previousStatus: 'PENDING',
+          newStatus: 'APPROVED',
+          changes: `Pedido aprobado y convertido en venta #${sale.id}`,
         },
       });
 
@@ -667,7 +671,9 @@ export class OrderService {
           orderId: id,
           action: 'CANCELLED',
           userId,
-          notes: `Pedido cancelado por el usuario`,
+          previousStatus: order.status,
+          newStatus: 'CANCELLED',
+          changes: `Pedido cancelado por el usuario`,
         },
       });
 
@@ -696,7 +702,7 @@ export class OrderService {
           select: { id: true, name: true, username: true },
         },
       },
-      orderBy: { timestamp: 'desc' },
+      orderBy: { createdAt: 'desc' },
     });
   }
 
