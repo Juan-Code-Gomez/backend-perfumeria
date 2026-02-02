@@ -51,7 +51,7 @@ export class OrderService {
         throw new BadRequestException('Uno o más productos no existen');
       }
 
-      // Validar stock disponible para cada producto
+      // Validar que los productos existen y están activos
       for (const detail of data.details) {
         const product = products.find(p => p.id === detail.productId);
         if (!product) {
@@ -59,16 +59,17 @@ export class OrderService {
         }
 
         if (!product.isActive) {
-          throw new BadRequestException(`Producto "${product.name}" no está activo`);
+          throw new BadRequestException(`Producto \"${product.name}\" no está activo`);
         }
 
-        const availableStock = product.stock - product.reservedStock;
-        if (availableStock < detail.quantity) {
-          throw new BadRequestException(
-            `Stock insuficiente para "${product.name}". ` +
-            `Disponible: ${availableStock}, Solicitado: ${detail.quantity}`
-          );
-        }
+        // NOTA: Se permite crear pedidos con stock 0 o negativo
+        // const availableStock = product.stock - product.reservedStock;
+        // if (availableStock < detail.quantity) {
+        //   throw new BadRequestException(
+        //     `Stock insuficiente para \"${product.name}\". ` +
+        //     `Disponible: ${availableStock}, Solicitado: ${detail.quantity}`
+        //   );
+        // }
       }
 
       // 3. Generar número de pedido
