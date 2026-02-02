@@ -104,10 +104,12 @@ export class CashClosingService {
       const totalIncome = data.totalIncome || 0;
 
       // 5. Cálculo CORRECTO de caja según sistema
-      // FÓRMULA: Saldo Inicial + Ventas en Efectivo + Ingresos Extra - Gastos - Pagos a Proveedores
+      // FÓRMULA: Saldo Inicial + Ventas (Efectivo + Tarjeta + Transferencia) + Ingresos Extra - Gastos - Pagos a Proveedores
       const systemCash = Number((
         (data.openingCash || 0) +        // Dinero con que se abrió la caja
-        cashSales +                      // Solo ventas en efectivo (no tarjeta, no crédito)
+        cashSales +                      // Ventas en efectivo
+        cardSales +                      // Ventas con tarjeta
+        transferSales +                  // Ventas por transferencia
         (data.totalIncome || 0) -        // Ingresos extra (opcional)
         totalExpense -                   // Gastos del día
         totalPayments                    // Pagos hechos a proveedores
@@ -345,7 +347,8 @@ export class CashClosingService {
 
     // Caja según sistema (FÓRMULA CORRECTA para mostrar en resumen)
     // NOTA: Aquí NO incluimos saldo inicial porque eso lo ingresa el usuario
-    const systemCashBase = Number((cashSales + totalIncome - totalExpense - totalPayments).toFixed(2));
+    // Incluye efectivo, tarjeta y transferencias (todos los pagos recibidos excepto crédito)
+    const systemCashBase = Number((cashSales + cardSales + transferSales + totalIncome - totalExpense - totalPayments).toFixed(2));
 
     const result = {
       fecha: startOfDay.toISOString().split('T')[0],
@@ -385,8 +388,8 @@ export class CashClosingService {
       })),
       // Información adicional para el frontend
       explanation: {
-        formula: "Saldo Inicial + Ventas Efectivo + Ingresos Extra - Gastos - Pagos Proveedores",
-        note: "El saldo inicial se ingresa manualmente en el formulario"
+        formula: "Saldo Inicial + Ventas (Efectivo + Tarjeta + Transferencia) + Ingresos Extra - Gastos - Pagos Proveedores",
+        note: "El saldo inicial se ingresa manualmente en el formulario. Se incluyen todas las ventas pagadas excepto crédito."
       }
     };
 
