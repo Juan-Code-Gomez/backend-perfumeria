@@ -22,129 +22,161 @@ export class OrderService {
   async create(data: CreateOrderDto, userId: number) {
     console.log('📝 Creando pedido:', JSON.stringify(data, null, 2));
 
-    return await this.prisma.$transaction(async (tx) => {
-      // 1. Validar que el cliente existe (si se proporciona)
-      if (data.clientId) {
-        const client = await tx.client.findUnique({
-          where: { id: data.clientId },
-        });
-        if (!client) {
-          throw new BadRequestException(`Cliente con ID ${data.clientId} no existe`);
-        }
-      }
-
-      // 2. Validar productos y stock disponible
-      const productIds = data.details.map(d => d.productId);
-      const products = await tx.product.findMany({
-        where: { id: { in: productIds } },
-        select: { 
-          id: true, 
-          name: true, 
-          stock: true, 
-          reservedStock: true,
-          salePrice: true,
-          isActive: true,
-        },
-      });
-
-      if (products.length !== productIds.length) {
-        throw new BadRequestException('Uno o más productos no existen');
-      }
-
-      // Validar que los productos existen y están activos
-      for (const detail of data.details) {
-        const product = products.find(p => p.id === detail.productId);
-        if (!product) {
-          throw new BadRequestException(`Producto con ID ${detail.productId} no encontrado`);
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        // 1. Validar que el cliente existe (si se proporciona)
+        if (data.clientId) {
+          const client = await tx.client.findUnique({
+            where: { id: data.clientId },
+          });
+          if (!client) {
+            throw new BadRequestException(`Cliente con ID ${data.clientId} no existe`);
+          }
         }
 
-        if (!product.isActive) {
-          throw new BadRequestException(`Producto \"${product.name}\" no está activo`);
-        }
-
-        // NOTA: Se permite crear pedidos con stock 0 o negativo
-        // const availableStock = product.stock - product.reservedStock;
-        // if (availableStock < detail.quantity) {
-        //   throw new BadRequestException(
-        //     `Stock insuficiente para \"${product.name}\". ` +
-        //     `Disponible: ${availableStock}, Solicitado: ${detail.quantity}`
-        //   );
-        // }
-      }
-
-      // 3. Generar número de pedido
-      const lastOrder = await tx.order.findFirst({
-        orderBy: { id: 'desc' },
-        select: { orderNumber: true },
-      });
-
-      const nextNumber = lastOrder 
-        ? parseInt(lastOrder.orderNumber.split('-')[1]) + 1 
-        : 1;
-      const orderNumber = `OD-${String(nextNumber).padStart(4, '0')}`;
-
-      // 4. Crear el pedido
-      const order = await tx.order.create({
-        data: {
-          orderNumber,
-          customerName: data.customerName || null,
-          clientId: data.clientId || null,
-          totalAmount: data.totalAmount,
-          notes: data.notes || null,
-          status: OrderStatus.PENDING,
-          createdById: userId,
-          details: {
-            create: data.details.map(d => ({
-              productId: d.productId,
-              quantity: d.quantity,
-              originalQty: d.quantity,
-              unitPrice: d.unitPrice,
-              totalPrice: d.totalPrice,
-            })),
+        // 2. Validar productos y stock disponible
+        const productIds = data.details.map(d => d.productId);
+        const products = await tx.product.findMany({
+          where: { id: { in: productIds } },
+          select: { 
+            id: true, 
+            name: true, 
+            stock: true, 
+            reservedStock: true,
+            salePrice: true,
+            isActive: true,
           },
-        },
-        include: {
-          details: {
-            include: {
-              product: {
-                select: { id: true, name: true, sku: true },
+        });
+
+        if (products.length !== productIds.length) {
+          throw new BadRequestException('Uno o más productos no existen');
+        }
+
+        // Validar que los productos existen y están activos
+        for (const detail of data.details) {
+          const product = products.find(p => p.id === detail.productId);
+          if (!product) {
+            throw new BadRequestException(`Producto con ID ${detail.productId} no encontrado`);
+          }
+
+          if (!product.isActive) {
+            throw new BadRequestException(`Producto \"${product.name}\" no está activo`);
+          }
+
+          // NOTA: Se permite crear pedidos con stock 0 o negativo
+          // const availableStock = product.stock - product.reservedStock;
+          // if (availableStock < detail.quantity) {
+          //   throw new BadRequestException(
+          //     `Stock insuficiente para \"${product.name}\". ` +
+          //     `Disponible: ${availableStock}, Solicitado: ${detail.quantity}`
+          //   );
+          // }
+        }
+
+        // 3. Generar número de pedido
+        const lastOrder = await tx.order.findFirst({
+          orderBy: { id: 'desc' },
+          select: { orderNumber: true },
+        });
+
+        const nextNumber = lastOrder 
+          ? parseInt(lastOrder.orderNumber.split('-')[1]) + 1 
+          : 1;
+        const orderNumber = `OD-${String(nextNumber).padStart(4, '0')}`;
+
+        // 4. Crear el pedido
+        console.log(`🔨 Creando pedido ${orderNumber}...`);
+        const order = await tx.order.create({
+          data: {
+            orderNumber,
+            customerName: data.customerName || null,
+            clientId: data.clientId || null,
+            totalAmount: data.totalAmount,
+            notes: data.notes || null,
+            status: OrderStatus.PENDING,
+            createdById: userId,
+            details: {
+              create: data.details.map(d => ({
+                productId: d.productId,
+                quantity: d.quantity,
+                originalQty: d.quantity,
+                unitPrice: d.unitPrice,
+                totalPrice: d.totalPrice,
+              })),
+            },
+          },
+          include: {
+            details: {
+              include: {
+                product: {
+                  select: { id: true, name: true, sku: true },
+                },
               },
             },
-          },
-          createdBy: {
-            select: { id: true, name: true, username: true },
-          },
-        },
-      });
-
-      console.log(`✅ Pedido ${orderNumber} creado exitosamente`);
-
-      // 5. RESERVAR stock en cada producto
-      for (const detail of data.details) {
-        await tx.product.update({
-          where: { id: detail.productId },
-          data: {
-            reservedStock: {
-              increment: detail.quantity,
+            createdBy: {
+              select: { id: true, name: true, username: true },
             },
           },
         });
-      }
 
-      // 6. Registrar en historial
-      await tx.orderHistory.create({
-        data: {
-          orderId: order.id,
-          action: 'CREATED',
-          userId,
-          changes: `Pedido creado: ${data.details.length} producto(s)`,
-        },
+        console.log(`✅ Pedido ${orderNumber} creado exitosamente`);
+
+        // 5. RESERVAR stock en cada producto
+        console.log(`📦 Reservando stock para ${data.details.length} productos...`);
+        for (const detail of data.details) {
+          const product = products.find(p => p.id === detail.productId);
+          console.log(`  - Producto ID ${detail.productId}: Stock actual=${product?.stock}, Reservado=${product?.reservedStock}, Incrementar=${detail.quantity}`);
+          
+          try {
+            await tx.product.update({
+              where: { id: detail.productId },
+              data: {
+                reservedStock: {
+                  increment: detail.quantity,
+                },
+              },
+            });
+            console.log(`  ✓ Stock reservado para producto ID ${detail.productId}`);
+          } catch (error) {
+            console.error(`  ✗ Error al reservar stock para producto ID ${detail.productId}:`, error);
+            throw error;
+          }
+        }
+
+        // 6. Registrar en historial
+        await tx.orderHistory.create({
+          data: {
+            orderId: order.id,
+            action: 'CREATED',
+            userId,
+            changes: `Pedido creado: ${data.details.length} producto(s)`,
+          },
+        });
+
+        console.log(`✅ Pedido ${orderNumber} completado exitosamente`);
+        
+        return order;
       });
-
-      console.log(`✅ Pedido ${orderNumber} creado exitosamente`);
+    } catch (error) {
+      console.error('❌ Error al crear pedido:', error);
+      console.error('Stack trace:', error.stack);
       
-      return order;
-    });
+      // Si es una excepción de NestJS, la dejamos pasar
+      if (error instanceof BadRequestException || error instanceof NotFoundException) {
+        throw error;
+      }
+      
+      // Para errores de base de datos, logeamos el detalle
+      if (error.code) {
+        console.error(`Database error code: ${error.code}`);
+        console.error(`Database error message: ${error.message}`);
+      }
+      
+      // Re-lanzamos con más contexto
+      throw new BadRequestException(
+        `Error al crear pedido: ${error.message || 'Error desconocido'}`
+      );
+    }
   }
 
   /**
