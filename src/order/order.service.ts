@@ -149,6 +149,8 @@ export class OrderService {
             orderId: order.id,
             action: 'CREATED',
             userId,
+            previousStatus: null,
+            newStatus: OrderStatus.PENDING,
             changes: `Pedido creado: ${data.details.length} producto(s)`,
           },
         });
