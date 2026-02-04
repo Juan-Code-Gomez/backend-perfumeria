@@ -504,15 +504,30 @@ export class OrderService {
         );
       }
 
-      // 2. Validar que todavía hay stock disponible
+      // 2. Validar y alertar sobre stock disponible
+      const stockWarnings: string[] = [];
+      
       for (const detail of order.details) {
         const currentStock = detail.product.stock - detail.product.reservedStock;
+        const finalStock = detail.product.stock - detail.quantity; // Stock después de aprobar
+        
         if (currentStock < 0) {
-          // Esto no debería pasar, pero verificamos
-          throw new BadRequestException(
-            `Error de consistencia: stock de "${detail.product.name}" está en negativo`
+          stockWarnings.push(
+            `⚠️ ADVERTENCIA: Producto "${detail.product.name}" tiene stock inconsistente (${currentStock})`
           );
         }
+        
+        if (finalStock < 0) {
+          stockWarnings.push(
+            `⚠️ ADVERTENCIA: Producto "${detail.product.name}" quedará con stock negativo (${finalStock}) después de aprobar`
+          );
+        }
+      }
+      
+      // Registrar advertencias en consola
+      if (stockWarnings.length > 0) {
+        console.warn('⚠️ ADVERTENCIAS DE STOCK AL APROBAR:');
+        stockWarnings.forEach(warning => console.warn(warning));
       }
 
       // 3. Calcular rentabilidad usando FIFO
@@ -650,6 +665,7 @@ export class OrderService {
       return {
         order: updatedOrder,
         sale,
+        warnings: stockWarnings.length > 0 ? stockWarnings : undefined,
       };
     });
   }
