@@ -262,6 +262,7 @@ model Sale {
   discountValue  Float?
   subtotalAmount Float
   cashSessionId  Int?
+  notes          String?
   creditNote     CreditNote?
   cashSession    CashSession?  @relation("CashSessionSales", fields: [cashSessionId], references: [id])
   client         Client?       @relation(fields: [clientId], references: [id])

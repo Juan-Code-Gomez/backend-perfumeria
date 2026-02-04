@@ -83,6 +83,10 @@ export class CreateSaleDto {
   @Type(() => CreateSalePaymentDto)
   payments?: CreateSalePaymentDto[]; // Nuevo: múltiples métodos de pago
 
+  @IsOptional()
+  @IsString()
+  notes?: string; // Observaciones de la venta
+
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => CreateSaleDetailDto)
