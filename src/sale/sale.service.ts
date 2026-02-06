@@ -154,6 +154,7 @@ export class SaleService {
           isPaid,
           paymentMethod: data.paymentMethod, // Mantener para compatibilidad
           cashSessionId: activeSession?.id, // Asociar con sesión activa si existe
+          notes: data.notes, // Agregar notas/observaciones
           details: {
             create: detailsWithProfit,
           },
