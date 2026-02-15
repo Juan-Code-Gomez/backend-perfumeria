@@ -186,11 +186,7 @@ async function main() {
     }
     
     log('═══════════════════════════════════════════════════', 'green');
-    try {
-      await prisma.$disconnect();
-    } catch (disconnectError) {
-      log('Error al desconectar Prisma', 'yellow');
-    }ADO EXITOSAMENTE', 'green');
+    log('  ✅ DEPLOYMENT COMPLETADO EXITOSAMENTE', 'green');
     log('═══════════════════════════════════════════════════', 'green');
     
     await prisma.$disconnect();
@@ -202,7 +198,11 @@ async function main() {
     log('═══════════════════════════════════════════════════', 'red');
     console.error(error);
     
-    await prisma.$disconnect();
+    try {
+      await prisma.$disconnect();
+    } catch (disconnectError) {
+      log('Error al desconectar Prisma', 'yellow');
+    }
     process.exit(1);
   }
 }
