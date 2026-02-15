@@ -16,8 +16,6 @@
 const { execSync } = require('child_process');
 const { PrismaClient } = require('@prisma/client');
 
-const prisma = new PrismaClient();
-
 // Colores para logs
 const colors = {
   reset: '\x1b[0m',
@@ -119,6 +117,18 @@ async function main() {
   log('  🚀 RAILWAY AUTO-DEPLOYMENT - PRISMA MIGRATIONS', 'cyan');
   log('═══════════════════════════════════════════════════', 'cyan');
 
+  // Validar DATABASE_URL antes de continuar
+  if (!process.env.DATABASE_URL) {
+    log('❌ ERROR: DATABASE_URL no está configurada', 'red');
+    log('Configura la variable DATABASE_URL en Railway y vuelve a deployar', 'yellow');
+    process.exit(1);
+  }
+
+  log(`✓ DATABASE_URL configurada: ${process.env.DATABASE_URL.substring(0, 20)}...`, 'green');
+
+  // Inicializar Prisma Client DESPUÉS de validar
+  const prisma = new PrismaClient();
+
   try {
     // 1. Verificar tipo de base de datos
     const isNewDatabase = await checkIfDatabaseIsNew();
@@ -176,7 +186,11 @@ async function main() {
     }
     
     log('═══════════════════════════════════════════════════', 'green');
-    log('  ✅ DEPLOYMENT COMPLETADO EXITOSAMENTE', 'green');
+    try {
+      await prisma.$disconnect();
+    } catch (disconnectError) {
+      log('Error al desconectar Prisma', 'yellow');
+    }ADO EXITOSAMENTE', 'green');
     log('═══════════════════════════════════════════════════', 'green');
     
     await prisma.$disconnect();
