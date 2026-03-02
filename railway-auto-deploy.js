@@ -47,7 +47,7 @@ function execCommand(command, description) {
   }
 }
 
-async function checkIfDatabaseIsNew() {
+async function checkIfDatabaseIsNew(prisma) {
   try {
     // Verificar si existe la tabla de migraciones
     const migrationTableExists = await prisma.$queryRaw`
@@ -97,7 +97,7 @@ async function checkIfDatabaseIsNew() {
   }
 }
 
-async function checkIfBaselineExists() {
+async function checkIfBaselineExists(prisma) {
   try {
     const result = await prisma.$queryRaw`
       SELECT EXISTS (
@@ -131,7 +131,7 @@ async function main() {
 
   try {
     // 1. Verificar tipo de base de datos
-    const isNewDatabase = await checkIfDatabaseIsNew();
+    const isNewDatabase = await checkIfDatabaseIsNew(prisma);
     
     if (isNewDatabase) {
       // Base de datos nueva
@@ -146,7 +146,7 @@ async function main() {
       // Base de datos existente
       log('📊 Base de datos EXISTENTE detectada', 'yellow');
       
-      const baselineExists = await checkIfBaselineExists();
+      const baselineExists = await checkIfBaselineExists(prisma);
       
       if (!baselineExists) {
         log('⚠️  Base de datos existente sin baseline marcado', 'yellow');
@@ -183,6 +183,61 @@ async function main() {
     log('Verificando Prisma Client...', 'blue');
     if (!execCommand('npx prisma generate', 'Generar Prisma Client')) {
       throw new Error('Fallo al generar Prisma Client');
+    }
+    
+    // 3. Verificar y crear tabla company_config si no existe
+    log('Verificando tabla company_config...', 'blue');
+    try {
+      const tableExists = await prisma.$queryRaw`
+        SELECT EXISTS (
+          SELECT FROM information_schema.tables 
+          WHERE table_schema = 'public' 
+          AND table_name = 'company_config'
+        ) as exists
+      `;
+      
+      if (!tableExists[0].exists) {
+        log('⚠️  Tabla company_config no existe, creando...', 'yellow');
+        await prisma.$executeRawUnsafe(`
+          CREATE TABLE "company_config" (
+            "id" SERIAL PRIMARY KEY,
+            "companyName" TEXT NOT NULL,
+            "nit" TEXT,
+            "address" TEXT,
+            "phone" TEXT,
+            "email" TEXT,
+            "website" TEXT,
+            "logo" TEXT,
+            "invoicePrefix" TEXT,
+            "invoiceFooter" TEXT,
+            "taxRate" DOUBLE PRECISION DEFAULT 0,
+            "currency" TEXT NOT NULL DEFAULT 'COP',
+            "posReceiptHeader" TEXT,
+            "posReceiptFooter" TEXT,
+            "printLogo" BOOLEAN NOT NULL DEFAULT false,
+            "timezone" TEXT NOT NULL DEFAULT 'America/Bogota',
+            "dateFormat" TEXT NOT NULL DEFAULT 'DD/MM/YYYY',
+            "numberFormat" TEXT NOT NULL DEFAULT 'es-CO',
+            "showLogo" BOOLEAN NOT NULL DEFAULT true,
+            "showNIT" BOOLEAN NOT NULL DEFAULT true,
+            "showAddress" BOOLEAN NOT NULL DEFAULT true,
+            "showPhone" BOOLEAN NOT NULL DEFAULT true,
+            "showEmail" BOOLEAN NOT NULL DEFAULT true,
+            "showWebsite" BOOLEAN NOT NULL DEFAULT true,
+            "ticketWidth" TEXT NOT NULL DEFAULT '80mm',
+            "fontSize" TEXT NOT NULL DEFAULT 'medium',
+            "includeVendor" BOOLEAN NOT NULL DEFAULT true,
+            "includeCashSession" BOOLEAN NOT NULL DEFAULT false,
+            "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+          )
+        `);
+        log('✓ Tabla company_config creada', 'green');
+      } else {
+        log('✓ Tabla company_config existe', 'green');
+      }
+    } catch (error) {
+      log(`⚠️  Error al verificar/crear company_config: ${error.message}`, 'yellow');
     }
     
     log('═══════════════════════════════════════════════════', 'green');
