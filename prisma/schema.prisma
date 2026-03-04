@@ -573,6 +573,8 @@ model CompanyConfig {
   fontSize         String   @default("medium")
   includeVendor    Boolean  @default(true)
   includeCashSession Boolean @default(false)
+  // Configuración de inventario
+  useFifoInventory Boolean  @default(true)
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 

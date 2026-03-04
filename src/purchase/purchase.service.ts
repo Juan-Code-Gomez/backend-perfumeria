@@ -28,6 +28,10 @@ export class PurchaseService {
 
     // Usamos una transacción para que todo ocurra en bloque
     return this.prisma.$transaction(async (tx) => {
+      // Obtener configuración de la empresa para saber si se usa FIFO
+      const companyConfig = await tx.companyConfig.findFirst();
+      const useFifo = companyConfig?.useFifoInventory ?? true;
+
       // 1. Crear la compra con sus detalles y datos de factura
       const purchase = await tx.purchase.create({
         data: {
@@ -59,22 +63,68 @@ export class PurchaseService {
         },
       });
 
-      // 2. Crear lotes para cada detalle de compra (Sistema FIFO)
-      await Promise.all(
-        data.details.map(async (d) => {
-          await tx.productBatch.create({
-            data: {
-              productId: d.productId,
-              purchaseId: purchase.id,
-              quantity: d.quantity,
-              remainingQty: d.quantity,
-              unitCost: d.unitCost,
-              purchaseDate: purchaseDate,
-            },
-          });
-          console.log(`📦 Lote creado: Producto ${d.productId}, Cantidad: ${d.quantity}, Costo: $${d.unitCost}`);
-        }),
-      );
+      if (useFifo) {
+        // MODO FIFO: Crear lotes para cada detalle de compra
+        await Promise.all(
+          data.details.map(async (d) => {
+            await tx.productBatch.create({
+              data: {
+                productId: d.productId,
+                purchaseId: purchase.id,
+                quantity: d.quantity,
+                remainingQty: d.quantity,
+                unitCost: d.unitCost,
+                purchaseDate: purchaseDate,
+              },
+            });
+            console.log(`📦 Lote FIFO creado: Producto ${d.productId}, Cantidad: ${d.quantity}, Costo: $${d.unitCost}`);
+          }),
+        );
+      } else {
+        // MODO NO-FIFO: Actualizar precio de compra del producto
+        await Promise.all(
+          data.details.map(async (d) => {
+            const currentProduct = await tx.product.findUnique({
+              where: { id: d.productId },
+              select: { purchasePrice: true, name: true },
+            });
+
+            // Actualizar el precio de compra del producto
+            await tx.product.update({
+              where: { id: d.productId },
+              data: {
+                purchasePrice: d.unitCost,
+              },
+            });
+
+            // Registrar en historial de precios
+            await tx.productPrice.create({
+              data: {
+                productId: d.productId,
+                purchasePrice: d.unitCost,
+                supplierId: data.supplierId,
+                effectiveDate: purchaseDate,
+                isActive: true,
+                notes: `Actualizado por factura ${data.invoiceNumber || `#${purchase.id}`}`,
+              },
+            });
+
+            if (currentProduct) {
+              const priceChange = d.unitCost - currentProduct.purchasePrice;
+              const changePercent = currentProduct.purchasePrice > 0 
+                ? ((priceChange / currentProduct.purchasePrice) * 100).toFixed(1)
+                : '100';
+              
+              console.log(
+                `💰 Precio actualizado: ${currentProduct.name} | ` +
+                `Antes: $${currentProduct.purchasePrice.toLocaleString()} | ` +
+                `Ahora: $${d.unitCost.toLocaleString()} | ` +
+                `Cambio: ${priceChange >= 0 ? '+' : ''}$${priceChange.toLocaleString()} (${changePercent}%)`
+              );
+            }
+          }),
+        );
+      }
 
       // 3. Sumar el stock a cada producto
       await Promise.all(
@@ -89,12 +139,12 @@ export class PurchaseService {
       );
 
       // Log resumen de la compra
-      console.log(`✅ Compra #${purchase.id} procesada:`);
+      console.log(`✅ Compra #${purchase.id} procesada (Modo: ${useFifo ? 'FIFO' : 'Precio Último'}):`);
       console.log(`   Subtotal: $${subtotal.toLocaleString()}`);
       if (discount > 0) console.log(`   Descuento: -$${discount.toLocaleString()}`);
       console.log(`   Total: $${totalAmount.toLocaleString()}`);
       if (data.invoiceNumber) console.log(`   Factura: ${data.invoiceNumber}`);
-      console.log(`   ${data.details.length} lotes creados`);
+      console.log(`   ${data.details.length} productos procesados`);
 
       return purchase;
     });
