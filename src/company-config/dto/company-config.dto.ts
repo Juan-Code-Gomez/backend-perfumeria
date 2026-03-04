@@ -111,6 +111,11 @@ export class CreateCompanyConfigDto {
   @IsOptional()
   @IsBoolean()
   includeCashSession?: boolean;
+
+  // Configuración de inventario
+  @IsOptional()
+  @IsBoolean()
+  useFifoInventory?: boolean;
 }
 
 export class UpdateCompanyConfigDto {
@@ -224,4 +229,9 @@ export class UpdateCompanyConfigDto {
   @IsOptional()
   @IsBoolean()
   includeCashSession?: boolean;
+
+  // Configuración de inventario
+  @IsOptional()
+  @IsBoolean()
+  useFifoInventory?: boolean;
 }
