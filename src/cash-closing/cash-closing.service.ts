@@ -1,7 +1,7 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateCashClosingDto } from './dto/create-cash-closing.dto';
-import { parseLocalDate, startOfDay as getStartOfDay, endOfDay as getEndOfDay } from '../common/utils/timezone.util';
+import { parseLocalDate, startOfDay as getStartOfDay, endOfDay as getEndOfDay, todayRangeColombia } from '../common/utils/timezone.util';
 
 @Injectable()
 export class CashClosingService {
@@ -15,17 +15,24 @@ export class CashClosingService {
         closingCash: data.closingCash
       });
 
-      // Usar utilidades de timezone para parsear correctamente
-      const date = data.date ? parseLocalDate(data.date) : new Date();
+      // Calcular la fecha en horario Colombia (UTC-5)
+      // Si se provee fecha, parsearla; si no, calcular la fecha actual en Colombia
+      // (new Date() en servidor UTC daría fecha incorrecta después de las 7 PM Colombia)
+      let dateStr: string;
+      if (data.date) {
+        dateStr = parseLocalDate(data.date).toISOString().split('T')[0];
+      } else {
+        const nowColombia = new Date(new Date().getTime() - 5 * 60 * 60 * 1000);
+        dateStr = nowColombia.toISOString().split('T')[0];
+      }
 
-      console.log(`🎯 Parsed date object: ${date.toISOString()}`);
-      console.log(`🌍 Local date representation: ${date.toLocaleDateString()} ${date.toLocaleTimeString()}`);
+      console.log(`🎯 Processing cash closing for Colombia date: ${dateStr}`);
 
-      // Calcular rango del día usando utilidades
-      const startOfDay = getStartOfDay(date.toISOString().split('T')[0]);
-      const endOfDay = getEndOfDay(date.toISOString().split('T')[0]);
+      // Calcular rango del día usando UTC-5 Colombia correctamente
+      const startOfDay = getStartOfDay(dateStr);
+      const endOfDay = getEndOfDay(dateStr);
 
-      console.log(`🕐 Date range (Local): ${startOfDay.toISOString()} to ${endOfDay.toISOString()}`);
+      console.log(`🕐 Date range (Colombia UTC-5): ${startOfDay.toISOString()} to ${endOfDay.toISOString()}`);
 
       console.log(`🔍 Processing cash closing for date: ${startOfDay.toISOString()}`);
 
@@ -264,12 +271,14 @@ export class CashClosingService {
       targetDate = new Date();
     }
     
-    // Calcular rango del día en zona horaria local
-    const startOfDay = new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate(), 0, 0, 0, 0);
-    const endOfDay = new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate(), 23, 59, 59, 999);
+    // Calcular rango del día usando UTC-5 (Colombia) para que funcione
+    // correctamente en servidores UTC (Railway) y con horario de Colombia
+    const dateStr = targetDate.toISOString().split('T')[0];
+    const startOfDay = getStartOfDay(dateStr);
+    const endOfDay = getEndOfDay(dateStr);
 
-    console.log('🎯 Target date:', targetDate.toLocaleDateString());
-    console.log('🕐 Date range (Local):', { 
+    console.log('🎯 Target date:', dateStr);
+    console.log('🕐 Date range (Colombia UTC-5):', { 
       start: startOfDay.toISOString(), 
       end: endOfDay.toISOString() 
     });
@@ -481,25 +490,23 @@ export class CashClosingService {
 
   async getAlerts() {
     try {
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      
-      const yesterday = new Date(today);
-      yesterday.setDate(yesterday.getDate() - 1);
+      // Usar Colombia UTC-5 para calcular "hoy" y "ayer" correctamente
+      const { startOfDay: todayStart, endOfDay: todayEnd } = todayRangeColombia();
+
+      // Calcular "ayer" en horario Colombia: restar 24h al inicio de hoy
+      const yesterdayStart = new Date(todayStart.getTime() - 24 * 60 * 60 * 1000);
+      const yesterdayEnd = new Date(todayEnd.getTime() - 24 * 60 * 60 * 1000);
 
       // Obtener el último cierre
       const lastClosing = await this.prisma.cashClosing.findFirst({
         orderBy: { date: 'desc' },
       });
 
-      // Obtener ventas de hoy
-      const todayEnd = new Date(today);
-      todayEnd.setHours(23, 59, 59, 999);
-      
+      // Obtener ventas de hoy (rango Colombia)
       const todaySales = await this.prisma.sale.findMany({
         where: {
           date: {
-            gte: today,
+            gte: todayStart,
             lte: todayEnd,
           },
         },
@@ -510,12 +517,12 @@ export class CashClosingService {
       const alerts: any[] = [];
 
       // Verificar cierre faltante de ayer
-      if (!lastClosing || lastClosing.date < yesterday) {
+      if (!lastClosing || lastClosing.date < yesterdayStart) {
         alerts.push({
           type: 'missing_closing',
           severity: 'error',
           message: 'Falta registrar cierre de caja de ayer',
-          data: { missingDate: yesterday.toISOString().split('T')[0] },
+          data: { missingDate: yesterdayStart.toISOString().split('T')[0] },
         });
       }
 
@@ -532,9 +539,10 @@ export class CashClosingService {
         });
       }
 
-      // Recordatorio de cierre diario (después de las 6 PM)
-      const currentHour = new Date().getHours();
-      if (currentHour >= 18 && totalSalesToday > 0 && (!lastClosing || lastClosing.date < today)) {
+      // Recordatorio de cierre diario (después de las 6 PM hora Colombia)
+      const nowColombia = new Date(new Date().getTime() - 5 * 60 * 60 * 1000);
+      const currentHourColombia = nowColombia.getUTCHours();
+      if (currentHourColombia >= 18 && totalSalesToday > 0 && (!lastClosing || lastClosing.date < todayStart)) {
         alerts.push({
           type: 'daily_reminder',
           severity: 'info',
@@ -545,7 +553,7 @@ export class CashClosingService {
 
       // Múltiples días sin cierre
       if (lastClosing) {
-        const daysDiff = Math.floor((today.getTime() - lastClosing.date.getTime()) / (1000 * 60 * 60 * 24));
+        const daysDiff = Math.floor((todayStart.getTime() - lastClosing.date.getTime()) / (1000 * 60 * 60 * 24));
         if (daysDiff > 3) {
           alerts.push({
             type: 'multiple_missing',
@@ -728,8 +736,11 @@ export class CashClosingService {
 
   // Método auxiliar para calcular resumen del día
   private async calculateDaySummary(date: Date) {
-    const startOfDay = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 0, 0, 0, 0);
-    const endOfDay = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 23, 59, 59, 999);
+    // Obtener el string de fecha en UTC y usar startOfDay/endOfDay con offset Colombia
+    // Nota: 'date' suele ser mediodía Colombia (17 UTC), por lo que .split('T')[0] da el día correcto
+    const dateStr = date.toISOString().split('T')[0];
+    const startOfDay = getStartOfDay(dateStr);
+    const endOfDay = getEndOfDay(dateStr);
 
     // Ventas del día
     const sales = await this.prisma.sale.findMany({

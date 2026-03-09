@@ -1,6 +1,6 @@
 import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { parseLocalDate, startOfDay, endOfDay } from '../common/utils/timezone.util';
+import { parseLocalDate, startOfDay, endOfDay, todayRangeColombia } from '../common/utils/timezone.util';
 
 export interface OpenCashSessionDto {
   openingCash: number;
@@ -22,8 +22,16 @@ export class CashSessionService {
    */
   async openCashSession(data: OpenCashSessionDto, userId?: number) {
     try {
-      const targetDate = data.date ? parseLocalDate(data.date) : new Date();
-      const dateOnly = targetDate.toISOString().split('T')[0]; // YYYY-MM-DD
+      // Si no hay fecha explícita, calcular la fecha actual en hora Colombia (UTC-5)
+      // Usar new Date() en server UTC daría la fecha incorrecta después de las 7 PM Colombia
+      let dateOnly: string;
+      if (data.date) {
+        dateOnly = parseLocalDate(data.date).toISOString().split('T')[0];
+      } else {
+        // Restar 5 horas para obtener la fecha en Colombia
+        const nowColombia = new Date(new Date().getTime() - 5 * 60 * 60 * 1000);
+        dateOnly = nowColombia.toISOString().split('T')[0];
+      }
       const startDay = startOfDay(dateOnly);
       const endDay = endOfDay(dateOnly);
 
