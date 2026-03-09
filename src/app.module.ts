@@ -30,6 +30,7 @@ import { PermissionsModule } from './permissions/permissions.module';
 import { SystemParametersModule } from './system-parameters/system-parameters.module';
 import { ProductBatchModule } from './product-batch/product-batch.module';
 import { OrderModule } from './order/order.module';
+//new module
 
 @Module({
   imports: [
