@@ -45,29 +45,59 @@ export class CashClosingService {
           date: { gte: startOfDay, lte: endOfDay },
           isPaid: true, // Solo ventas que han sido pagadas
         },
+        include: {
+          payments: true, // Incluir los pagos individuales (para pagos múltiples)
+        },
       });
 
       console.log(`📊 Found ${sales.length} PAID sales for the day`);
 
       const totalSales = sales.reduce((sum, s) => sum + (s.totalAmount || 0), 0);
       
-      // SOLO ventas en efectivo Y pagadas afectan la caja física
-      const cashSales = sales
-        .filter((s) => s.paymentMethod === 'Efectivo' && s.isPaid)
-        .reduce((sum, s) => sum + (s.totalAmount || 0), 0);
-        
-      const cardSales = sales
-        .filter((s) => s.paymentMethod === 'Tarjeta' && s.isPaid)
-        .reduce((sum, s) => sum + (s.totalAmount || 0), 0);
-        
-      const transferSales = sales
-        .filter((s) => s.paymentMethod === 'Transferencia' && s.isPaid)
-        .reduce((sum, s) => sum + (s.totalAmount || 0), 0);
-        
-      // Ventas a crédito NO afectan el efectivo en caja
-      const creditSales = sales
-        .filter((s) => s.paymentMethod === 'Crédito' || !s.isPaid)
-        .reduce((sum, s) => sum + (s.totalAmount || 0), 0);
+      // Calcular montos por método de pago usando la tabla SalePayment
+      // Esto permite contar correctamente pagos múltiples (ej: $50k efectivo + $30k transferencia)
+      let cashSales = 0;
+      let cardSales = 0;
+      let transferSales = 0;
+      let creditSales = 0;
+
+      sales.forEach(sale => {
+        if (sale.payments && sale.payments.length > 0) {
+          // Si tiene registros de pago múltiple, usar esos
+          sale.payments.forEach(payment => {
+            const amount = payment.amount || 0;
+            const method = payment.method?.toLowerCase() || '';
+            
+            if (method.includes('efectivo') || method.includes('cash')) {
+              cashSales += amount;
+            } else if (method.includes('tarjeta') || method.includes('card')) {
+              cardSales += amount;
+            } else if (method.includes('transferencia') || method.includes('transfer')) {
+              transferSales += amount;
+            } else if (method.includes('crédito') || method.includes('credit')) {
+              creditSales += amount;
+            } else {
+              // Si el método no es reconocido, sumarlo a efectivo por defecto
+              console.warn(`⚠️ Unknown payment method: ${payment.method}, treating as cash`);
+              cashSales += amount;
+            }
+          });
+        } else {
+          // Compatibilidad hacia atrás: usar el método de pago único si no hay registros de pago
+          const amount = sale.totalAmount || 0;
+          const method = sale.paymentMethod?.toLowerCase() || 'efectivo';
+          
+          if (method.includes('efectivo') || method.includes('cash')) {
+            cashSales += amount;
+          } else if (method.includes('tarjeta') || method.includes('card')) {
+            cardSales += amount;
+          } else if (method.includes('transferencia') || method.includes('transfer')) {
+            transferSales += amount;
+          } else if (method.includes('crédito') || method.includes('credit')) {
+            creditSales += amount;
+          }
+        }
+      });
 
       console.log(`💰 Sales breakdown:
         - Total Sales: $${totalSales}
@@ -288,6 +318,9 @@ export class CashClosingService {
       where: {
         date: { gte: startOfDay, lte: endOfDay },
       },
+      include: {
+        payments: true, // Incluir los pagos individuales (para pagos múltiples)
+      },
     });
 
     const paidSales = allSales.filter(s => s.isPaid);
@@ -297,23 +330,51 @@ export class CashClosingService {
 
     const totalSales = allSales.reduce((sum, s) => sum + (s.totalAmount || 0), 0);
     
-    // SOLO ventas PAGADAS en efectivo afectan la caja física
-    const cashSales = paidSales
-      .filter((s) => s.paymentMethod === 'Efectivo')
-      .reduce((sum, s) => sum + (s.totalAmount || 0), 0);
-      
-    const cardSales = paidSales
-      .filter((s) => s.paymentMethod === 'Tarjeta')
-      .reduce((sum, s) => sum + (s.totalAmount || 0), 0);
-      
-    const transferSales = paidSales
-      .filter((s) => s.paymentMethod === 'Transferencia')
-      .reduce((sum, s) => sum + (s.totalAmount || 0), 0);
-      
-    // Crédito incluye ventas marcadas como crédito O ventas no pagadas
-    const creditSales = allSales
-      .filter((s) => s.paymentMethod === 'Crédito' || !s.isPaid)
-      .reduce((sum, s) => sum + (s.totalAmount || 0), 0);
+    // Calcular montos por método de pago usando la tabla SalePayment
+    let cashSales = 0;
+    let cardSales = 0;
+    let transferSales = 0;
+    let creditSales = 0;
+
+    allSales.forEach(sale => {
+      if (sale.payments && sale.payments.length > 0) {
+        // Si tiene registros de pago múltiple, usar esos
+        sale.payments.forEach(payment => {
+          const amount = payment.amount || 0;
+          const method = payment.method?.toLowerCase() || '';
+          
+          if (method.includes('efectivo') || method.includes('cash')) {
+            cashSales += amount;
+          } else if (method.includes('tarjeta') || method.includes('card')) {
+            cardSales += amount;
+          } else if (method.includes('transferencia') || method.includes('transfer')) {
+            transferSales += amount;
+          } else if (method.includes('crédito') || method.includes('credit') || !sale.isPaid) {
+            creditSales += amount;
+          } else {
+            // Si el método no es reconocido, sumarlo a efectivo por defecto
+            cashSales += amount;
+          }
+        });
+      } else if (sale.isPaid) {
+        // Compatibilidad hacia atrás: usar el método de pago único si no hay registros de pago
+        const amount = sale.totalAmount || 0;
+        const method = sale.paymentMethod?.toLowerCase() || 'efectivo';
+        
+        if (method.includes('efectivo') || method.includes('cash')) {
+          cashSales += amount;
+        } else if (method.includes('tarjeta') || method.includes('card')) {
+          cardSales += amount;
+        } else if (method.includes('transferencia') || method.includes('transfer')) {
+          transferSales += amount;
+        } else if (method.includes('crédito') || method.includes('credit')) {
+          creditSales += amount;
+        }
+      } else {
+        // Venta no pagada = crédito
+        creditSales += sale.totalAmount || 0;
+      }
+    });
 
     console.log(`💰 Summary breakdown:
       - Total Sales: $${totalSales}
