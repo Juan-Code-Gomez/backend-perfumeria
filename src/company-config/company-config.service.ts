@@ -121,11 +121,20 @@ export class CompanyConfigService {
   }
 
   async getPublicConfig() {
-    const config = await this.findCurrent();
-    return {
-      companyName: config.companyName,
-      logo: config.logo,
-    };
+    try {
+      const config = await this.findCurrent();
+      return {
+        companyName: config?.companyName || 'Sistema de Ventas',
+        logo: config?.logo || null,
+      };
+    } catch (error) {
+      // Si hay error (ej: migraciones pendientes), devolver valores por defecto
+      console.warn('⚠️  Error obteniendo configuración pública, usando defaults:', error.message);
+      return {
+        companyName: 'Sistema de Ventas',
+        logo: null,
+      };
+    }
   }
 
   async uploadLogo(file: Express.Multer.File) {
