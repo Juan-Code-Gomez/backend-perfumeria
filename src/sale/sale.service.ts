@@ -62,55 +62,64 @@ export class SaleService {
     }
     
     // Validar stock estricto si el feature está activo
-    // Obtener tenantId de la configuración de la empresa
-    const companyConfig = await this.prisma.companyConfig.findFirst({
-      select: { id: true }
-    });
-    
-    if (companyConfig) {
-      const tenantId = companyConfig.id;
-      const hasStrictValidation = await this.featuresService.hasFeature(tenantId, 'STRICT_STOCK_VALIDATION');
+    // SOLO para clientes que tengan el feature habilitado
+    try {
+      const companyConfig = await this.prisma.companyConfig.findFirst({
+        select: { id: true }
+      });
       
-      if (hasStrictValidation) {
-        console.log('🔒 Validación estricta de stock activada');
+      if (companyConfig) {
+        const tenantId = companyConfig.id;
+        const hasStrictValidation = await this.featuresService.hasFeature(tenantId, 'STRICT_STOCK_VALIDATION');
         
-        // Obtener stock actual de todos los productos
-        const productIds = data.details.map(d => d.productId);
-        const products = await this.prisma.product.findMany({
-          where: { id: { in: productIds } },
-          select: { id: true, name: true, stock: true }
-        });
-        
-        const productMap = new Map(products.map(p => [p.id, p]));
-        
-        // Validar cada producto
-        for (const detail of data.details) {
-          const product = productMap.get(detail.productId);
+        if (hasStrictValidation) {
+          console.log('🔒 Validación estricta de stock activada para tenant:', tenantId);
           
-          if (!product) {
-            throw new BadRequestException(
-              `Producto con ID ${detail.productId} no encontrado`
-            );
+          // Obtener stock actual de todos los productos
+          const productIds = data.details.map(d => d.productId);
+          const products = await this.prisma.product.findMany({
+            where: { id: { in: productIds } },
+            select: { id: true, name: true, stock: true }
+          });
+          
+          const productMap = new Map(products.map(p => [p.id, p]));
+          
+          // Validar cada producto
+          for (const detail of data.details) {
+            const product = productMap.get(detail.productId);
+            
+            if (!product) {
+              throw new BadRequestException(
+                `Producto con ID ${detail.productId} no encontrado`
+              );
+            }
+            
+            const currentStock = product.stock || 0;
+            const requestedQty = Number(detail.quantity);
+            
+            if (currentStock === 0) {
+              throw new BadRequestException(
+                `No hay stock disponible de ${product.name}`
+              );
+            }
+            
+            if (requestedQty > currentStock) {
+              throw new BadRequestException(
+                `Stock insuficiente de ${product.name}. Disponible: ${currentStock}, Solicitado: ${requestedQty}`
+              );
+            }
           }
           
-          const currentStock = product.stock || 0;
-          const requestedQty = Number(detail.quantity);
-          
-          if (currentStock === 0) {
-            throw new BadRequestException(
-              `No hay stock disponible de ${product.name}`
-            );
-          }
-          
-          if (requestedQty > currentStock) {
-            throw new BadRequestException(
-              `Stock insuficiente de ${product.name}. Disponible: ${currentStock}, Solicitado: ${requestedQty}`
-            );
-          }
+          console.log('✅ Validación de stock exitosa');
         }
-        
-        console.log('✅ Validación de stock exitosa');
       }
+    } catch (error) {
+      // Si el error es de validación de stock, relanzarlo
+      if (error instanceof BadRequestException) {
+        throw error;
+      }
+      // Si es otro tipo de error, logearlo pero no bloquear la venta
+      console.error('⚠️ Error en validación de stock, continuando sin validar:', error.message);
     }
     
     let isPaid = data.isPaid ?? false;
