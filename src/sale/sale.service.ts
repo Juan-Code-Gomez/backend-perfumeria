@@ -4,6 +4,7 @@ import { ComboService } from '../services/combo.service';
 import { SimpleCapitalService } from '../services/simple-capital.service';
 import { SystemParametersService } from '../system-parameters/system-parameters.service';
 import { ProductBatchService } from '../product-batch/product-batch.service';
+import { FeaturesService } from '../features/features.service';
 import { CreateSaleDto } from './dto/create-sale.dto';
 import { CreateSalePaymentDto } from './dto/create-sale-payment.dto';
 import { CreateCreditNoteDto } from './dto/create-credit-note.dto';
@@ -20,6 +21,7 @@ export class SaleService {
     private capitalService: SimpleCapitalService,
     private systemParametersService: SystemParametersService,
     private batchService: ProductBatchService,
+    private featuresService: FeaturesService,
   ) {}
 
   async create(data: CreateSaleDto) {
@@ -56,6 +58,58 @@ export class SaleService {
         console.log('✅ Fecha manual permitida:', saleDate.toLocaleDateString());
       } else {
         console.log('✅ Venta con fecha de hoy (automática):', saleDate.toLocaleDateString());
+      }
+    }
+    
+    // Validar stock estricto si el feature está activo
+    // Obtener tenantId de la configuración de la empresa
+    const companyConfig = await this.prisma.companyConfig.findFirst({
+      select: { id: true }
+    });
+    
+    if (companyConfig) {
+      const tenantId = companyConfig.id;
+      const hasStrictValidation = await this.featuresService.hasFeature(tenantId, 'STRICT_STOCK_VALIDATION');
+      
+      if (hasStrictValidation) {
+        console.log('🔒 Validación estricta de stock activada');
+        
+        // Obtener stock actual de todos los productos
+        const productIds = data.details.map(d => d.productId);
+        const products = await this.prisma.product.findMany({
+          where: { id: { in: productIds } },
+          select: { id: true, name: true, stock: true }
+        });
+        
+        const productMap = new Map(products.map(p => [p.id, p]));
+        
+        // Validar cada producto
+        for (const detail of data.details) {
+          const product = productMap.get(detail.productId);
+          
+          if (!product) {
+            throw new BadRequestException(
+              `Producto con ID ${detail.productId} no encontrado`
+            );
+          }
+          
+          const currentStock = product.stock || 0;
+          const requestedQty = Number(detail.quantity);
+          
+          if (currentStock === 0) {
+            throw new BadRequestException(
+              `No hay stock disponible de ${product.name}`
+            );
+          }
+          
+          if (requestedQty > currentStock) {
+            throw new BadRequestException(
+              `Stock insuficiente de ${product.name}. Disponible: ${currentStock}, Solicitado: ${requestedQty}`
+            );
+          }
+        }
+        
+        console.log('✅ Validación de stock exitosa');
       }
     }
     

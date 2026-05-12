@@ -95,6 +95,14 @@ async function main() {
       featureType: 'INTEGRATION',
       isActive: true,
     },
+    {
+      code: 'STRICT_STOCK_VALIDATION',
+      name: 'Validación Estricta de Stock',
+      description: 'Bloquea ventas cuando no hay stock disponible',
+      module: 'SALES',
+      featureType: 'VALIDATION',
+      isActive: true,
+    },
   ];
 
   console.log('📦 Creando features globales...');
@@ -148,6 +156,7 @@ async function main() {
     'JEWELRY_CUSTOM_ORDERS',
     'CERTIFICATE_MANAGEMENT',
     'JEWELRY_APPRAISAL',
+    'STRICT_STOCK_VALIDATION',
   ];
 
   console.log('🔓 Activando features para joyería...');
