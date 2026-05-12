@@ -162,12 +162,7 @@ const migrations = [
       }
     },
     apply: async (prisma) => {
-      await prisma.$executeRawUnsafe(`
-        ALTER TABLE users 
-        ADD COLUMN IF NOT EXISTS "tenant_id" INTEGER;
-
-        -- Agregar foreign key
-        ALTER TABLE usersALTER TABLE users ADD COLUMN IF NOT EXISTS "tenant_id" INTEGER`);
+      await prisma.$executeRawUnsafe(`ALTER TABLE users ADD COLUMN IF NOT EXISTS "tenant_id" INTEGER`);
       
       // Drop constraint si existe
       try {
@@ -181,7 +176,12 @@ const migrations = [
         ON DELETE SET NULL ON UPDATE CASCADE
       `);
       
-      await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "User_tenant_id_idx" ON "users"("tenant_id")
+      await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "User_tenant_id_idx" ON "users"("tenant_id")`);
+      console.log('   ✅ Campo tenant_id agregado a users');
+    }
+  },
+  // Agregar futuras migraciones aquí...
+];
 
 async function runAutoMigrations() {
   console.log('\n🔄 Ejecutando auto-migraciones...\n');
