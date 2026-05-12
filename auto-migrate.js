@@ -155,28 +155,28 @@ const migrations = [
     description: 'Agregar columna tenant_id a tabla users',
     check: async (prisma) => {
       try {
-        await prisma.$queryRaw`SELECT "tenant_id" FROM users LIMIT 1`;
+        await prisma.$queryRaw`SELECT "tenant_id" FROM "User" LIMIT 1`;
         return true;
       } catch (error) {
         return false;
       }
     },
     apply: async (prisma) => {
-      await prisma.$executeRawUnsafe(`ALTER TABLE users ADD COLUMN IF NOT EXISTS "tenant_id" INTEGER`);
+      await prisma.$executeRawUnsafe(`ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "tenant_id" INTEGER`);
       
       // Drop constraint si existe
       try {
-        await prisma.$executeRawUnsafe(`ALTER TABLE users DROP CONSTRAINT IF EXISTS "User_tenant_id_fkey"`);
+        await prisma.$executeRawUnsafe(`ALTER TABLE "User" DROP CONSTRAINT IF EXISTS "User_tenant_id_fkey"`);
       } catch (e) { /* ignore */ }
       
       await prisma.$executeRawUnsafe(`
-        ALTER TABLE users
+        ALTER TABLE "User"
         ADD CONSTRAINT "User_tenant_id_fkey" 
         FOREIGN KEY ("tenant_id") REFERENCES "company_config"("id") 
         ON DELETE SET NULL ON UPDATE CASCADE
       `);
       
-      await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "User_tenant_id_idx" ON "users"("tenant_id")`);
+      await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "User_tenant_id_idx" ON "User"("tenant_id")`);
       console.log('   ✅ Campo tenant_id agregado a users');
     }
   },
