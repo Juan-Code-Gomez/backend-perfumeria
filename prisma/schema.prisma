@@ -16,6 +16,9 @@ model User {
   createdAt               DateTime                @default(now())
   updatedAt               DateTime                @updatedAt
   companyCode             String?
+  // Multi-tenancy: Relación con CompanyConfig
+  tenantId                Int?                    @map("tenant_id")
+  tenant                  CompanyConfig?          @relation("UserTenant", fields: [tenantId], references: [id])
   cashClosings            CashClosing[]           @relation("UserCashClosings")
   cashSessionsClosed      CashSession[]           @relation("CashSessionClosedBy")
   cashSessionsOpened      CashSession[]           @relation("CashSessionOpenedBy")
@@ -25,6 +28,8 @@ model User {
   orderHistory            OrderHistory[]
   ordersApproved          Order[]                 @relation("OrderApprover")
   ordersCreated           Order[]                 @relation("OrderCreator")
+  
+  @@index([tenantId])
 }
 
 model Role {
@@ -545,6 +550,13 @@ model InvoicePayment {
 
 model CompanyConfig {
   id               Int      @id @default(autoincrement())
+  
+  // Multi-tenancy: Identificador único de cliente
+  tenantCode       String?  @unique @map("tenant_code")
+  tenantName       String?  @map("tenant_name")
+  industry         String?  // "perfumeria", "joyeria", "farmacia", etc.
+  plan             String   @default("BASIC") // "BASIC", "PRO", "ENTERPRISE", "CUSTOM"
+  
   companyName      String
   nit              String?
   address          String?
@@ -577,6 +589,11 @@ model CompanyConfig {
   useFifoInventory Boolean  @default(true)
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
+  
+  // Relaciones multi-tenant
+  users            User[]           @relation("UserTenant")
+  features         TenantFeature[]
+  customFields     TenantCustomField[]
 
   @@map("company_config")
 }
@@ -799,4 +816,68 @@ enum OrderStatus {
   PENDING
   APPROVED
   CANCELLED
+}
+
+// ============================================
+// MULTI-TENANT FEATURE FLAGS SYSTEM
+// ============================================
+
+// Catálogo global de features disponibles en el sistema
+model Feature {
+  id            Int             @id @default(autoincrement())
+  code          String          @unique  // "JEWELRY_MODULE", "JEWELRY_REPAIRS", etc.
+  name          String                   // "Módulo de Joyería"
+  description   String?
+  module        String                   // "products", "sales", "inventory", etc.
+  featureType   String          @default("MODULE") // "MODULE", "FIELD", "REPORT", "INTEGRATION"
+  isActive      Boolean         @default(true)
+  createdAt     DateTime        @default(now()) @map("created_at")
+  updatedAt     DateTime        @updatedAt @map("updated_at")
+  
+  tenantFeatures TenantFeature[]
+  
+  @@map("features")
+}
+
+// Features activados por cliente (tenant)
+model TenantFeature {
+  id             Int           @id @default(autoincrement())
+  tenantId       Int           @map("tenant_id")
+  featureCode    String        @map("feature_code")
+  isEnabled      Boolean       @default(true) @map("is_enabled")
+  configuration  Json?         // Configuración específica del feature para este cliente
+  createdAt      DateTime      @default(now()) @map("created_at")
+  updatedAt      DateTime      @updatedAt @map("updated_at")
+  
+  tenant         CompanyConfig @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  feature        Feature       @relation(fields: [featureCode], references: [code], onDelete: Cascade)
+  
+  @@unique([tenantId, featureCode])
+  @@index([tenantId])
+  @@index([featureCode])
+  @@map("tenant_features")
+}
+
+// Campos personalizados por cliente
+model TenantCustomField {
+  id            Int           @id @default(autoincrement())
+  tenantId      Int           @map("tenant_id")
+  module        String        // "products", "sales", "clients", etc.
+  fieldName     String        @map("field_name")    // "goldWeight", "stoneType", etc.
+  fieldLabel    String        @map("field_label")   // "Peso del oro (gr)"
+  fieldType     String        @map("field_type")    // "number", "text", "select", "date", "boolean"
+  fieldOptions  Json?         @map("field_options") // Para selects: {"options": ["option1", "option2"]}
+  defaultValue  String?       @map("default_value")
+  isRequired    Boolean       @default(false) @map("is_required")
+  order         Int           @default(0)
+  isActive      Boolean       @default(true) @map("is_active")
+  validation    Json?         // Reglas de validación: {"min": 0, "max": 100}
+  createdAt     DateTime      @default(now()) @map("created_at")
+  updatedAt     DateTime      @updatedAt @map("updated_at")
+  
+  tenant        CompanyConfig @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  
+  @@unique([tenantId, module, fieldName])
+  @@index([tenantId, module])
+  @@map("tenant_custom_fields")
 }
