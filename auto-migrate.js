@@ -38,8 +38,8 @@ const migrations = [
       }
     },
     apply: async (prisma) => {
+      // Ejecutar cada comando por separado (PostgreSQL no permite múltiples en uno)
       await prisma.$executeRawUnsafe(`
-        -- Crear tabla Feature
         CREATE TABLE IF NOT EXISTS "Feature" (
           "id" SERIAL PRIMARY KEY,
           "code" TEXT NOT NULL UNIQUE,
@@ -49,9 +49,10 @@ const migrations = [
           "is_active" BOOLEAN NOT NULL DEFAULT true,
           "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
           "updated_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
-        );
+        )
+      `);
 
-        -- Crear tabla TenantFeature
+      await prisma.$executeRawUnsafe(`
         CREATE TABLE IF NOT EXISTS "TenantFeature" (
           "id" SERIAL PRIMARY KEY,
           "tenant_id" INTEGER NOT NULL,
@@ -61,9 +62,10 @@ const migrations = [
           "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
           "updated_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
           CONSTRAINT "TenantFeature_tenant_feature_unique" UNIQUE ("tenant_id", "feature_id")
-        );
+        )
+      `);
 
-        -- Crear tabla TenantCustomField
+      await prisma.$executeRawUnsafe(`
         CREATE TABLE IF NOT EXISTS "TenantCustomField" (
           "id" SERIAL PRIMARY KEY,
           "tenant_id" INTEGER NOT NULL,
@@ -80,26 +82,51 @@ const migrations = [
           "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
           "updated_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
           CONSTRAINT "TenantCustomField_tenant_module_field_unique" UNIQUE ("tenant_id", "module", "field_name")
-        );
-
-        -- Agregar foreign keys
-        ALTER TABLE "TenantFeature" 
-          DROP CONSTRAINT IF EXISTS "TenantFeature_tenant_id_fkey",
-          DROP CONSTRAINT IF EXISTS "TenantFeature_feature_id_fkey",
-          ADD CONSTRAINT "TenantFeature_tenant_id_fkey" FOREIGN KEY ("tenant_id") REFERENCES "company_config"("id") ON DELETE CASCADE ON UPDATE CASCADE,
-          ADD CONSTRAINT "TenantFeature_feature_id_fkey" FOREIGN KEY ("feature_id") REFERENCES "Feature"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
-        ALTER TABLE "TenantCustomField"
-          DROP CONSTRAINT IF EXISTS "TenantCustomField_tenant_id_fkey",
-          ADD CONSTRAINT "TenantCustomField_tenant_id_fkey" FOREIGN KEY ("tenant_id") REFERENCES "company_config"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
-        -- Crear índices
-        CREATE INDEX IF NOT EXISTS "TenantFeature_tenant_id_idx" ON "TenantFeature"("tenant_id");
-        CREATE INDEX IF NOT EXISTS "TenantFeature_feature_id_idx" ON "TenantFeature"("feature_id");
-        CREATE INDEX IF NOT EXISTS "TenantCustomField_tenant_id_idx" ON "TenantCustomField"("tenant_id");
-        CREATE INDEX IF NOT EXISTS "Feature_code_idx" ON "Feature"("code");
-        CREATE INDEX IF NOT EXISTS "Feature_module_idx" ON "Feature"("module");
+        )
       `);
+
+      // Foreign keys para TenantFeature
+      try {
+        await prisma.$executeRawUnsafe(`ALTER TABLE "TenantFeature" DROP CONSTRAINT IF EXISTS "TenantFeature_tenant_id_fkey"`);
+      } catch (e) { /* ignore */ }
+      
+      try {
+        await prisma.$executeRawUnsafe(`ALTER TABLE "TenantFeature" DROP CONSTRAINT IF EXISTS "TenantFeature_feature_id_fkey"`);
+      } catch (e) { /* ignore */ }
+
+      await prisma.$executeRawUnsafe(`
+        ALTER TABLE "TenantFeature" 
+        ADD CONSTRAINT "TenantFeature_tenant_id_fkey" 
+        FOREIGN KEY ("tenant_id") REFERENCES "company_config"("id") 
+        ON DELETE CASCADE ON UPDATE CASCADE
+      `);
+
+      await prisma.$executeRawUnsafe(`
+        ALTER TABLE "TenantFeature" 
+        ADD CONSTRAINT "TenantFeature_feature_id_fkey" 
+        FOREIGN KEY ("feature_id") REFERENCES "Feature"("id") 
+        ON DELETE CASCADE ON UPDATE CASCADE
+      `);
+
+      // Foreign key para TenantCustomField
+      try {
+        await prisma.$executeRawUnsafe(`ALTER TABLE "TenantCustomField" DROP CONSTRAINT IF EXISTS "TenantCustomField_tenant_id_fkey"`);
+      } catch (e) { /* ignore */ }
+
+      await prisma.$executeRawUnsafe(`
+        ALTER TABLE "TenantCustomField"
+        ADD CONSTRAINT "TenantCustomField_tenant_id_fkey" 
+        FOREIGN KEY ("tenant_id") REFERENCES "company_config"("id") 
+        ON DELETE CASCADE ON UPDATE CASCADE
+      `);
+
+      // Índices
+      await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "TenantFeature_tenant_id_idx" ON "TenantFeature"("tenant_id")`);
+      await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "TenantFeature_feature_id_idx" ON "TenantFeature"("feature_id")`);
+      await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "TenantCustomField_tenant_id_idx" ON "TenantCustomField"("tenant_id")`);
+      await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "Feature_code_idx" ON "Feature"("code")`);
+      await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "Feature_module_idx" ON "Feature"("module")`);
+
       console.log('   ✅ Tablas de multi-tenancy creadas');
     }
   },
@@ -115,16 +142,11 @@ const migrations = [
       }
     },
     apply: async (prisma) => {
-      await prisma.$executeRawUnsafe(`
-        ALTER TABLE company_config 
-        ADD COLUMN IF NOT EXISTS "tenant_code" TEXT,
-        ADD COLUMN IF NOT EXISTS "tenant_name" TEXT,
-        ADD COLUMN IF NOT EXISTS "industry" TEXT,
-        ADD COLUMN IF NOT EXISTS "plan" TEXT DEFAULT 'FREE';
-
-        -- Crear índice único en tenant_code
-        CREATE UNIQUE INDEX IF NOT EXISTS "company_config_tenant_code_key" ON "company_config"("tenant_code");
-      `);
+      await prisma.$executeRawUnsafe(`ALTER TABLE company_config ADD COLUMN IF NOT EXISTS "tenant_code" TEXT`);
+      await prisma.$executeRawUnsafe(`ALTER TABLE company_config ADD COLUMN IF NOT EXISTS "tenant_name" TEXT`);
+      await prisma.$executeRawUnsafe(`ALTER TABLE company_config ADD COLUMN IF NOT EXISTS "industry" TEXT`);
+      await prisma.$executeRawUnsafe(`ALTER TABLE company_config ADD COLUMN IF NOT EXISTS "plan" TEXT DEFAULT 'FREE'`);
+      await prisma.$executeRawUnsafe(`CREATE UNIQUE INDEX IF NOT EXISTS "company_config_tenant_code_key" ON "company_config"("tenant_code")`);
       console.log('   ✅ Campos de tenant agregados a company_config');
     }
   },
@@ -145,18 +167,21 @@ const migrations = [
         ADD COLUMN IF NOT EXISTS "tenant_id" INTEGER;
 
         -- Agregar foreign key
+        ALTER TABLE usersALTER TABLE users ADD COLUMN IF NOT EXISTS "tenant_id" INTEGER`);
+      
+      // Drop constraint si existe
+      try {
+        await prisma.$executeRawUnsafe(`ALTER TABLE users DROP CONSTRAINT IF EXISTS "User_tenant_id_fkey"`);
+      } catch (e) { /* ignore */ }
+      
+      await prisma.$executeRawUnsafe(`
         ALTER TABLE users
-          DROP CONSTRAINT IF EXISTS "User_tenant_id_fkey",
-          ADD CONSTRAINT "User_tenant_id_fkey" FOREIGN KEY ("tenant_id") REFERENCES "company_config"("id") ON DELETE SET NULL ON UPDATE CASCADE;
-
-        -- Crear índice
-        CREATE INDEX IF NOT EXISTS "User_tenant_id_idx" ON "users"("tenant_id");
+        ADD CONSTRAINT "User_tenant_id_fkey" 
+        FOREIGN KEY ("tenant_id") REFERENCES "company_config"("id") 
+        ON DELETE SET NULL ON UPDATE CASCADE
       `);
-      console.log('   ✅ Campo tenant_id agregado a users');
-    }
-  },
-  // Agregar futuras migraciones aquí...
-];
+      
+      await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "User_tenant_id_idx" ON "users"("tenant_id")
 
 async function runAutoMigrations() {
   console.log('\n🔄 Ejecutando auto-migraciones...\n');
